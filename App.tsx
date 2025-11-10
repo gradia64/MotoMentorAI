@@ -1,7 +1,8 @@
 
+
 import React, { useState, useEffect, FormEvent } from 'react';
 import { generateItinerary, diagnoseProblem, getMaintenanceTips } from './services/geminiService';
-import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, Day, SavedTrip, MaintenanceRecord, MaintenanceType, MaintenanceReminder } from './types';
+import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, Day, SavedTrip, MaintenanceRecord, MaintenanceType, MaintenanceReminder, GpxPoint } from './types';
 import { MapPinIcon, WrenchScrewdriverIcon, CogIcon } from '@heroicons/react/24/outline';
 
 import TripPlanner from './features/TripPlanner/TripPlanner';
@@ -31,6 +32,7 @@ const App: React.FC = () => {
     const [duration, setDuration] = useState('');
     const [tripPeriod, setTripPeriod] = useState('');
     const [roadPreference, setRoadPreference] = useState('Strade panoramiche e tortuose');
+    const [customRoadPreferenceText, setCustomRoadPreferenceText] = useState('');
     const [customPrompt, setCustomPrompt] = useState('');
     const [itinerary, setItinerary] = useState<Itinerary | null>(null);
     const [activeTripId, setActiveTripId] = useState<string | null>(null);
@@ -101,6 +103,7 @@ const App: React.FC = () => {
                     setDuration(drafts.tripPlanner.duration || '');
                     setTripPeriod(drafts.tripPlanner.tripPeriod || '');
                     setRoadPreference(drafts.tripPlanner.roadPreference || 'Strade panoramiche e tortuose');
+                    setCustomRoadPreferenceText(drafts.tripPlanner.customRoadPreferenceText || '');
                     setCustomPrompt(drafts.tripPlanner.customPrompt || '');
                 }
                 if (drafts.virtualMechanic) {
@@ -124,6 +127,7 @@ const App: React.FC = () => {
                 duration,
                 tripPeriod,
                 roadPreference,
+                customRoadPreferenceText,
                 customPrompt,
             },
             virtualMechanic: {
@@ -131,7 +135,7 @@ const App: React.FC = () => {
             },
         };
         localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(drafts));
-    }, [tripType, selectedTour, departure, destination, duration, tripPeriod, roadPreference, problemDescription, customPrompt]);
+    }, [tripType, selectedTour, departure, destination, duration, tripPeriod, roadPreference, customRoadPreferenceText, problemDescription, customPrompt]);
 
 
     const handleAddVehicle = (newVehicleData: Omit<GarageVehicle, 'id'>) => {
@@ -186,9 +190,10 @@ const App: React.FC = () => {
         setItinerary(null);
         setTripMaintenanceAlerts([]);
         try {
+            const finalRoadPreference = roadPreference === 'Percorso personalizzato' ? customRoadPreferenceText : roadPreference;
             const options = {
                 duration,
-                roadPreference,
+                roadPreference: finalRoadPreference,
                 period: tripPeriod,
                 motorcycle: activeVehicle ?? undefined,
                 customPrompt,
@@ -234,6 +239,7 @@ const App: React.FC = () => {
             tripType,
             duration,
             roadPreference,
+            customRoadPreferenceText,
             period: tripPeriod,
             customPrompt,
             ...(tripType === 'itinerary'
@@ -282,6 +288,7 @@ const App: React.FC = () => {
             setTripType('itinerary');
             setSelectedTour('Tour della Scozia');
             setRoadPreference('Strade panoramiche e tortuose');
+            setCustomRoadPreferenceText('');
         }
     };
 
@@ -292,6 +299,7 @@ const App: React.FC = () => {
             setTripType(inputs.tripType);
             setDuration(inputs.duration);
             setRoadPreference(inputs.roadPreference);
+            setCustomRoadPreferenceText(inputs.customRoadPreferenceText || '');
             setTripPeriod(inputs.period || '');
             setCustomPrompt(inputs.customPrompt || '');
             setDeparture(inputs.departure || '');
@@ -509,17 +517,74 @@ ${day.tracciato_gpx.map(p => `<trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>`).jo
 
     const showFullMap = () => {
         if (!itinerary) return;
-        const allPoints = itinerary.programma_giornaliero.flatMap(d => d.tracciato_gpx);
-        if (allPoints.length > 0) {
-            const firstPoint = allPoints[0];
-            const lastPoint = allPoints[allPoints.length -1];
-            // Create a route URL with waypoints
-            const waypoints = allPoints.slice(1, -1).map(p => `${p.lat},${p.lon}`).join('|');
-            const mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${firstPoint.lat},${firstPoint.lon}&destination=${lastPoint.lat},${lastPoint.lon}&waypoints=${waypoints}&travelmode=driving`;
-            window.open(mapUrl, '_blank');
-        } else {
+    
+        const dailyStages = itinerary.programma_giornaliero;
+        if (dailyStages.length === 0 || dailyStages.every(d => !d.tracciato_gpx || d.tracciato_gpx.length === 0)) {
             alert("Nessun dato GPX da visualizzare sulla mappa.");
+            return;
         }
+    
+        const keyPoints: GpxPoint[] = [];
+    
+        // Add the starting point of the whole trip (start of day 1)
+        const firstDayWithPoints = dailyStages.find(d => d.tracciato_gpx && d.tracciato_gpx.length > 0);
+        if (firstDayWithPoints) {
+            keyPoints.push(firstDayWithPoints.tracciato_gpx[0]);
+        }
+    
+        // Add the end point of each day
+        for (const day of dailyStages) {
+            if (day.tracciato_gpx && day.tracciato_gpx.length > 0) {
+                keyPoints.push(day.tracciato_gpx[day.tracciato_gpx.length - 1]);
+            }
+        }
+        
+        const uniqueKeyPoints = [...new Map(keyPoints.map(item => [`${item.lat},${item.lon}`, item])).values()];
+    
+        if (uniqueKeyPoints.length < 2) {
+            alert("Punti GPX insufficienti per creare un percorso complessivo.");
+            return;
+        }
+        
+        // The format is /dir/stop1/stop2/stop3...
+        const locationsString = uniqueKeyPoints
+            .map(p => `${p.lat},${p.lon}`)
+            .join('/');
+    
+        const mapUrl = `https://www.google.com/maps/dir/${locationsString}?travelmode=driving`;
+        window.open(mapUrl, '_blank');
+    };
+
+    const showDayMap = (day: Day) => {
+        const points = day.tracciato_gpx;
+        if (!points || points.length < 2) {
+            alert("Dati GPX insufficienti per visualizzare la mappa del giorno.");
+            return;
+        }
+    
+        const origin = points[0];
+        const destination = points[points.length - 1];
+        let waypoints = points.slice(1, -1);
+        
+        // Google Maps Directions URL API is limited. Let's cap waypoints to a safe number.
+        const MAX_WAYPOINTS = 10;
+        
+        if (waypoints.length > MAX_WAYPOINTS) {
+            // Intelligent simplification: select N points evenly spaced from the original array
+            const simplifiedWaypoints: GpxPoint[] = [];
+            const step = Math.floor(waypoints.length / (MAX_WAYPOINTS - 1));
+            for (let i = 0; i < waypoints.length; i += step) {
+                simplifiedWaypoints.push(waypoints[i]);
+            }
+            // Ensure the last waypoint is included to preserve the route's exit path
+            simplifiedWaypoints.push(waypoints[waypoints.length -1]);
+            waypoints = [...new Map(simplifiedWaypoints.map(item => [`${item.lat},${item.lon}`, item])).values()]; // de-duplicate
+        }
+    
+        const waypointsString = waypoints.map(p => `${p.lat},${p.lon}`).join('|');
+        const mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lon}&destination=${destination.lat},${destination.lon}&waypoints=${waypointsString}&travelmode=driving`;
+        
+        window.open(mapUrl, '_blank');
     };
 
     return (
@@ -553,6 +618,8 @@ ${day.tracciato_gpx.map(p => `<trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>`).jo
                                 setTripPeriod={setTripPeriod}
                                 roadPreference={roadPreference}
                                 setRoadPreference={setRoadPreference}
+                                customRoadPreferenceText={customRoadPreferenceText}
+                                setCustomRoadPreferenceText={setCustomRoadPreferenceText}
                                 customPrompt={customPrompt}
                                 setCustomPrompt={setCustomPrompt}
                                 itinerary={itinerary}
@@ -564,6 +631,7 @@ ${day.tracciato_gpx.map(p => `<trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>`).jo
                                 downloadPdf={handleDownloadPdf}
                                 exportDayGpx={exportDayGpx}
                                 showFullMap={showFullMap}
+                                showDayMap={showDayMap}
                                 savedConfirmation={savedConfirmation}
                                 tripType={tripType}
                                 setTripType={setTripType}

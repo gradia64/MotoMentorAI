@@ -32,7 +32,7 @@ const VirtualMechanic: React.FC<VirtualMechanicProps> = ({ handleSubmit, mode, s
     <div>
         <div className="flex justify-center bg-gray-700 rounded-full p-1 mb-6 max-w-lg mx-auto">
             <button onClick={() => setMode('workshop')} className={`flex items-center justify-center gap-2 px-4 py-1.5 w-1/3 rounded-full text-sm font-semibold transition ${mode === 'workshop' ? 'bg-blue-600 text-white' : 'text-gray-300'}`}><BookOpenIcon className="w-4 h-4"/>Officina</button>
-            <button onClick={() => setMode('maintenance')} className={`flex items-center justify-center gap-2 px-4 py-1.5 w-1/3 rounded-full text-sm font-semibold transition ${mode === 'maintenance' ? 'bg-blue-600 text-white' : 'text-gray-300'}`}><ArchiveBoxIcon className="w-4 h-4"/>Check Pre-Viaggio</button>
+            <button onClick={() => setMode('maintenance')} className={`flex items-center justify-center gap-2 px-4 py-1.5 w-1/3 rounded-full text-sm font-semibold transition ${mode === 'maintenance' ? 'bg-blue-600 text-white' : 'text-gray-300'}`}><ArchiveBoxIcon className="w-4 h-4"/>Checklist Viaggio</button>
             <button onClick={() => setMode('diagnose')} className={`flex items-center justify-center gap-2 px-4 py-1.5 w-1/3 rounded-full text-sm font-semibold transition ${mode === 'diagnose' ? 'bg-blue-600 text-white' : 'text-gray-300'}`}><WrenchScrewdriverIcon className="w-4 h-4"/>Diagnosi Avarie</button>
         </div>
 

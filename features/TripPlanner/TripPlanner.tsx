@@ -20,6 +20,8 @@ export interface TripPlannerProps {
     setTripPeriod: React.Dispatch<React.SetStateAction<string>>;
     roadPreference: string;
     setRoadPreference: React.Dispatch<React.SetStateAction<string>>;
+    customRoadPreferenceText: string;
+    setCustomRoadPreferenceText: React.Dispatch<React.SetStateAction<string>>;
     customPrompt: string;
     setCustomPrompt: React.Dispatch<React.SetStateAction<string>>;
     itinerary: Itinerary | null;
@@ -31,6 +33,7 @@ export interface TripPlannerProps {
     downloadPdf: () => void;
     exportDayGpx: (day: Day) => void;
     showFullMap: () => void;
+    showDayMap: (day: Day) => void;
     savedConfirmation: string | null;
     tripType: 'itinerary' | 'tour';
     setTripType: React.Dispatch<React.SetStateAction<'itinerary' | 'tour'>>;
@@ -43,7 +46,7 @@ export interface TripPlannerProps {
     tripMaintenanceAlerts: string[];
 }
 
-const TripPlanner: React.FC<TripPlannerProps> = ({ handleSubmit, departure, setDeparture, destination, setDestination, duration, setDuration, tripPeriod, setTripPeriod, roadPreference, setRoadPreference, customPrompt, setCustomPrompt, itinerary, loading, isGeneratingPdf, saveItinerary, onSaveAndReset, loadLastItinerary, downloadPdf, exportDayGpx, showFullMap, savedConfirmation, tripType, setTripType, selectedTour, setSelectedTour, tripHistory, onLoadFromHistory, onDeleteFromHistory, onExportHistory, tripMaintenanceAlerts }) => {
+const TripPlanner: React.FC<TripPlannerProps> = ({ handleSubmit, departure, setDeparture, destination, setDestination, duration, setDuration, tripPeriod, setTripPeriod, roadPreference, setRoadPreference, customRoadPreferenceText, setCustomRoadPreferenceText, customPrompt, setCustomPrompt, itinerary, loading, isGeneratingPdf, saveItinerary, onSaveAndReset, loadLastItinerary, downloadPdf, exportDayGpx, showFullMap, showDayMap, savedConfirmation, tripType, setTripType, selectedTour, setSelectedTour, tripHistory, onLoadFromHistory, onDeleteFromHistory, onExportHistory, tripMaintenanceAlerts }) => {
     
     const TOURS = [
         "Tour della Scozia", "Avventura in Marocco", "Giro della Penisola Iberica", "Esplorazione della Turchia", "Le strade alpine della Svizzera", "Coste e fiordi della Norvegia", "Le Alpi Francesi", "Auschwitz Il viaggio della memoria"
@@ -58,6 +61,7 @@ const TripPlanner: React.FC<TripPlannerProps> = ({ handleSubmit, departure, setD
         "Strade secondarie poco trafficate",
         "Percorso più diretto e veloce",
         "Evita completamente le autostrade",
+        "Percorso personalizzato",
     ];
 
     const [showHistory, setShowHistory] = useState(false);
@@ -92,6 +96,22 @@ const TripPlanner: React.FC<TripPlannerProps> = ({ handleSubmit, departure, setD
                         {ROAD_PREFERENCES.map(pref => <option key={pref} value={pref}>{pref}</option>)}
                     </SelectField>
                 </div>
+                {roadPreference === 'Percorso personalizzato' && (
+                    <div className="md:col-span-2 animate-fade-in">
+                        <label htmlFor="customRoadPreferenceText" className="block text-sm font-medium text-gray-300">Descrivi il tuo percorso ideale</label>
+                        <div className="mt-1">
+                            <textarea
+                                id="customRoadPreferenceText"
+                                value={customRoadPreferenceText}
+                                onChange={(e) => setCustomRoadPreferenceText(e.target.value)}
+                                rows={2}
+                                placeholder="Es. 'Voglio strade con molte curve ma con un buon asfalto, evitando i centri abitati e privilegiando i paesaggi boschivi.'"
+                                className="block w-full px-3 py-2 text-white bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                required
+                            />
+                        </div>
+                    </div>
+                )}
                  <div className="md:col-span-2">
                     <label htmlFor="customPrompt" className="block text-sm font-medium text-gray-300">Richieste Specifiche (opzionale)</label>
                     <div className="mt-1">
@@ -147,7 +167,10 @@ const TripPlanner: React.FC<TripPlannerProps> = ({ handleSubmit, departure, setD
                                 <div key={index} className={`day-container ${index % 2 === 0 ? 'bg-gray-700/50' : 'bg-gray-600/50'} p-4 rounded-lg`}>
                                     <div className="flex justify-between items-start">
                                         <h3 className="text-xl font-semibold text-blue-400">Giorno {day.giorno}: {day.titolo_tappa}</h3>
-                                        <ActionButton onClick={() => exportDayGpx(day)} className="bg-gray-600 hover:bg-gray-500 text-xs py-1 px-2"><ArrowDownOnSquareIcon className="w-4 h-4"/> GPX</ActionButton>
+                                        <div className="flex gap-2">
+                                            <ActionButton onClick={() => showDayMap(day)} className="bg-gray-600 hover:bg-gray-500 text-xs py-1 px-2"><GlobeAltIcon className="w-4 h-4"/> Mappa Giorno</ActionButton>
+                                            <ActionButton onClick={() => exportDayGpx(day)} className="bg-gray-600 hover:bg-gray-500 text-xs py-1 px-2"><ArrowDownOnSquareIcon className="w-4 h-4"/> GPX</ActionButton>
+                                        </div>
                                     </div>
                                     <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-gray-400 my-2">
                                         <span>{day.chilometri_tappa} km stimati</span>

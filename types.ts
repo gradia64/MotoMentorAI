@@ -83,6 +83,7 @@ export interface SavedTrip {
         selectedTour?: string;
         duration: string;
         roadPreference: string;
+        customRoadPreferenceText?: string;
         period: string;
         customPrompt?: string;
     };
