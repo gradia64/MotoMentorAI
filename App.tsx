@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, FormEvent } from 'react';
 import { generateItinerary, diagnoseProblem, getMaintenanceTips } from './services/geminiService';
 import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, Day, SavedTrip, MaintenanceRecord, MaintenanceType, MaintenanceReminder, GpxPoint } from './types';
@@ -680,6 +678,9 @@ ${day.tracciato_gpx.map(p => `<trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>`).jo
                     </div>
                 </div>
             </main>
+            <footer className="text-center py-4 text-sm text-gray-500">
+                <p>&copy; {new Date().getFullYear()} MotoMentor AI. Tutti i diritti riservati.</p>
+            </footer>
         </div>
     );
 };
