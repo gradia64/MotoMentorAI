@@ -1,0 +1,14 @@
+import React from 'react';
+
+const ActionButton: React.FC<{ onClick?: () => void; children: React.ReactNode; disabled?: boolean; className?: string, type?: 'button' | 'submit' }> = ({ onClick, children, disabled, className = '', type = 'button' }) => (
+    <button
+        type={type}
+        onClick={onClick}
+        disabled={disabled}
+        className={`flex items-center justify-center gap-2 px-4 py-2 font-semibold text-white bg-blue-600 rounded-md shadow-sm hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors ${className}`}
+    >
+        {children}
+    </button>
+);
+
+export default ActionButton;
