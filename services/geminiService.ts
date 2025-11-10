@@ -66,7 +66,7 @@ Distribuisci l'intero percorso (andata, tour e ritorno) in modo equilibrato nei 
 - ${motorcycleRoutingPhilosophy}
 - Il cuore del viaggio è il ${tourName}, che deve esplorare le zone più belle e le strade più adatte alle moto della regione.
 - Le tappe di andata e ritorno devono essere percorsi efficienti ma piacevoli per raggiungere e lasciare l'area del tour.
-- Per ogni giorno (sia di trasferimento che di tour), fornisci un titolo, una descrizione del percorso che includa i luoghi più belli da visitare, i chilometri totali della tappa, un elenco di attività o luoghi di interesse, un tracciato GPX e una previsione meteo realistica basata sulla località e il periodo dell'anno (temperatura min/max in Celsius, condizioni e una parola chiave per un'icona: 'sun', 'cloud', 'rain', 'storm', 'snow').
+- Per ogni giorno (sia di trasferimento che di tour), fornisci un titolo, una descrizione del percorso che includa i luoghi più belli da visitare, i chilometri totali della tappa, un elenco di attività o luoghi di interesse, un tracciato GPX e una previsione meteo realistica basata sulla località e il periodo dell'anno (temperatura min/max in Celsius, condizioni e una parola chiave per un'icona: scegli tra 'sun', 'moon', 'partly-cloudy-day', 'partly-cloudy-night', 'cloud', 'rain', 'storm', 'snow', 'fog', 'wind').
 - Nella 'descrizione_percorso' di ogni giorno, inizia con una breve frase che descriva il tipo di strada per quella tappa, riflettendo direttamente la preferenza '${roadPreference}' scelta (es. 'Il percorso di oggi si snoderà su strade panoramiche e tortuose...' o 'Questa tappa prevede un trasferimento veloce su superstrade...').
 - ${extraFieldsPrompt}
 - ${motorcycleInfo}
@@ -80,7 +80,7 @@ Fornisci la risposta esclusivamente in formato JSON.`;
 - Il viaggio deve includere sia l'andata che il ritorno, distribuendo le tappe in modo equilibrato nei ${duration} giorni totali.
 - Preferenza sul tipo di strade: ${roadPreference}.
 - ${motorcycleRoutingPhilosophy}
-- Per ogni giorno, fornisci un titolo, una descrizione del percorso, i chilometri totali della tappa, un elenco di attività o luoghi di interesse, un tracciato GPX e una previsione meteo realistica basata sulla località e il periodo dell'anno (temperatura min/max in Celsius, condizioni e una parola chiave per un'icona: 'sun', 'cloud', 'rain', 'storm', 'snow').
+- Per ogni giorno, fornisci un titolo, una descrizione del percorso, i chilometri totali della tappa, un elenco di attività o luoghi di interesse, un tracciato GPX e una previsione meteo realistica basata sulla località e il periodo dell'anno (temperatura min/max in Celsius, condizioni e una parola chiave per un'icona: scegli tra 'sun', 'moon', 'partly-cloudy-day', 'partly-cloudy-night', 'cloud', 'rain', 'storm', 'snow', 'fog', 'wind').
 - Nella 'descrizione_percorso' di ogni giorno, inizia con una breve frase che descriva il tipo di strada per quella tappa, riflettendo direttamente la preferenza '${roadPreference}' scelta (es. 'Il percorso di oggi si snoderà su strade panoramiche e tortuose...' o 'Questa tappa prevede un trasferimento veloce su superstrade...').
 - ${extraFieldsPrompt}
 - ${motorcycleInfo}

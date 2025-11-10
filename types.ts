@@ -129,7 +129,7 @@ export const ITINERARY_SCHEMA = {
                             temperatura_min: { type: Type.INTEGER, description: "Temperatura minima prevista in gradi Celsius." },
                             temperatura_max: { type: Type.INTEGER, description: "Temperatura massima prevista in gradi Celsius." },
                             condizioni: { type: Type.STRING, description: "Breve descrizione delle condizioni meteo (es. 'Soleggiato', 'Pioggia leggera')." },
-                            icona: { type: Type.STRING, description: "Una parola chiave per un'icona meteo (es. 'sun', 'cloud', 'rain', 'storm', 'snow')." }
+                            icona: { type: Type.STRING, description: "Una parola chiave per un'icona meteo. Scegli tra: 'sun', 'moon', 'partly-cloudy-day', 'partly-cloudy-night', 'cloud', 'rain', 'storm', 'snow', 'fog', 'wind'." }
                         },
                         required: ["temperatura_min", "temperatura_max", "condizioni", "icona"]
                     },

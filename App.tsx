@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, FormEvent } from 'react';
 import { generateItinerary, diagnoseProblem, getMaintenanceTips } from './services/geminiService';
 import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, Day, SavedTrip, MaintenanceRecord, MaintenanceType, MaintenanceReminder } from './types';
@@ -27,7 +28,7 @@ const App: React.FC = () => {
     const [selectedTour, setSelectedTour] = useState('Tour della Scozia');
     const [departure, setDeparture] = useState('');
     const [destination, setDestination] = useState('');
-    const [duration, setDuration] = useState('7');
+    const [duration, setDuration] = useState('');
     const [tripPeriod, setTripPeriod] = useState('');
     const [roadPreference, setRoadPreference] = useState('Strade panoramiche e tortuose');
     const [customPrompt, setCustomPrompt] = useState('');
@@ -97,7 +98,7 @@ const App: React.FC = () => {
                     setSelectedTour(drafts.tripPlanner.selectedTour || 'Tour della Scozia');
                     setDeparture(drafts.tripPlanner.departure || '');
                     setDestination(drafts.tripPlanner.destination || '');
-                    setDuration(drafts.tripPlanner.duration || '7');
+                    setDuration(drafts.tripPlanner.duration || '');
                     setTripPeriod(drafts.tripPlanner.tripPeriod || '');
                     setRoadPreference(drafts.tripPlanner.roadPreference || 'Strade panoramiche e tortuose');
                     setCustomPrompt(drafts.tripPlanner.customPrompt || '');
@@ -275,7 +276,7 @@ const App: React.FC = () => {
             setTripMaintenanceAlerts([]);
             setDeparture('');
             setDestination('');
-            setDuration('7');
+            setDuration('');
             setTripPeriod('');
             setCustomPrompt('');
             setTripType('itinerary');
