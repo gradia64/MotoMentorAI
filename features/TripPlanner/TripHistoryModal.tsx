@@ -1,5 +1,5 @@
-import React from 'react';
-import { XMarkIcon, TrashIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import React, { useRef } from 'react';
+import { XMarkIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { SavedTrip } from '../../types';
 import ActionButton from '../../components/ActionButton';
 import { useEscapeKey } from '../../utils/hooks';
@@ -11,10 +11,23 @@ interface TripHistoryModalProps {
     onLoad: (id: string) => void;
     onDelete: (id: string) => void;
     onExport: () => void;
+    onImport: (file: File) => void;
 }
 
-const TripHistoryModal: React.FC<TripHistoryModalProps> = ({ show, onClose, history, onLoad, onDelete, onExport }) => {
+const TripHistoryModal: React.FC<TripHistoryModalProps> = ({ show, onClose, history, onLoad, onDelete, onExport, onImport }) => {
     useEscapeKey(onClose, show);
+    const importInputRef = useRef<HTMLInputElement>(null);
+
+    const handleImportClick = () => {
+        importInputRef.current?.click();
+    };
+
+    const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files && event.target.files[0]) {
+            onImport(event.target.files[0]);
+            onClose(); // Close modal after selection
+        }
+    };
     
     if (!show) return null;
 
@@ -33,21 +46,21 @@ const TripHistoryModal: React.FC<TripHistoryModalProps> = ({ show, onClose, hist
                             {history.map(trip => (
                                 <div key={trip.id} className="bg-gray-700/50 p-3 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                     <div>
-                                        <p className="font-bold text-white">{trip.itinerary.titolo_viaggio}</p>
-                                        <p className="text-sm text-gray-400">{trip.inputs.duration} giorni - {trip.inputs.tripType === 'tour' ? trip.inputs.selectedTour : `${trip.inputs.departure} -> ${trip.inputs.destination}`}</p>
+                                        <p className="font-bold text-white">{trip.itinerary.tripTitle}</p>
+                                        <p className="text-sm text-gray-400">{trip.inputs.duration} giorni - {trip.inputs.period} - {trip.inputs.tripType === 'tour' ? trip.inputs.selectedTour : `${trip.inputs.departure} -> ${trip.inputs.destination}`}</p>
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
                                         <button 
                                             onClick={() => { onLoad(trip.id); onClose(); }} 
                                             className="text-xs py-1 px-3 rounded-full font-semibold transition-colors bg-blue-600 hover:bg-blue-500 text-white"
-                                            aria-label={`Carica ${trip.itinerary.titolo_viaggio}`}
+                                            aria-label={`Carica ${trip.itinerary.tripTitle}`}
                                         >
                                             Carica
                                         </button>
                                         <button 
                                             onClick={() => onDelete(trip.id)} 
                                             className="text-gray-500 hover:text-red-400 p-1 rounded-full transition-colors"
-                                            aria-label={`Elimina ${trip.itinerary.titolo_viaggio}`}
+                                            aria-label={`Elimina ${trip.itinerary.tripTitle}`}
                                         >
                                             <TrashIcon className="w-5 h-5"/>
                                         </button>
@@ -57,7 +70,17 @@ const TripHistoryModal: React.FC<TripHistoryModalProps> = ({ show, onClose, hist
                         </div>
                     )}
                 </div>
-                <div className="p-4 border-t border-gray-700 mt-auto">
+                <div className="p-4 border-t border-gray-700 mt-auto flex gap-3">
+                     <input
+                        type="file"
+                        ref={importInputRef}
+                        onChange={handleFileSelected}
+                        accept=".json"
+                        className="hidden"
+                    />
+                    <ActionButton onClick={handleImportClick} className="w-full bg-gray-600 hover:bg-gray-500">
+                        <ArrowUpTrayIcon className="w-5 h-5"/> Importa Storico (.json)
+                    </ActionButton>
                     <ActionButton onClick={onExport} disabled={history.length === 0} className="w-full">
                         <ArrowDownTrayIcon className="w-5 h-5"/> Esporta Storico (.json)
                     </ActionButton>

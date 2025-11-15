@@ -5,6 +5,7 @@ import MaintenanceLog from './MaintenanceLog';
 import MaintenanceList from './MaintenanceList';
 import DiagnosisHistoryModal from './DiagnosisHistoryModal';
 import { useAppContext } from '../../state/AppContext';
+import Tooltip from '../../components/Tooltip';
 
 
 const VirtualMechanic: React.FC = () => {
@@ -175,30 +176,34 @@ const VirtualMechanic: React.FC = () => {
                     </>
                 )}
                 <div className="flex flex-wrap items-center gap-4">
-                    <ActionButton 
-                        type="submit" 
-                        disabled={!activeVehicle || (mechanicMode === 'maintenance' && tripHistory.length === 0)} 
-                        loading={isLoading}
-                        loadingText={mechanicMode === 'diagnose' ? 'Analisi...' : 'Generazione...'}
-                    >
-                        {mechanicMode === 'diagnose' ? 'Ottieni Diagnosi' : 'Genera Checklist'}
-                    </ActionButton>
-                    {mechanicMode === 'diagnose' && (
+                    <Tooltip text={mechanicMode === 'diagnose' ? 'Invia la descrizione per ottenere una diagnosi dall\'IA' : 'Genera una checklist di manutenzione per il tuo prossimo viaggio'}>
                         <ActionButton 
-                            type="button" 
-                            onClick={() => setShowHistoryModal(true)} 
-                            disabled={isLoading || !activeVehicle || vehicleDiagnoses.length === 0} 
-                            className="bg-gray-600 hover:bg-gray-500"
+                            type="submit" 
+                            disabled={!activeVehicle || (mechanicMode === 'maintenance' && tripHistory.length === 0)} 
+                            loading={isLoading}
+                            loadingText={mechanicMode === 'diagnose' ? 'Analisi...' : 'Generazione...'}
                         >
-                            <DocumentTextIcon className="w-5 h-5"/> Storico Diagnosi
+                            {mechanicMode === 'diagnose' ? 'Ottieni Diagnosi' : 'Genera Checklist'}
                         </ActionButton>
+                    </Tooltip>
+                    {mechanicMode === 'diagnose' && (
+                        <Tooltip text="Visualizza le diagnosi salvate per il veicolo attivo">
+                            <ActionButton 
+                                type="button" 
+                                onClick={() => setShowHistoryModal(true)} 
+                                disabled={isLoading || !activeVehicle || vehicleDiagnoses.length === 0} 
+                                className="bg-gray-600 hover:bg-gray-500"
+                            >
+                                <DocumentTextIcon className="w-5 h-5"/> Storico Diagnosi
+                            </ActionButton>
+                        </Tooltip>
                     )}
                 </div>
             </form>
             
             <div className="mt-6">
                 {isLoading && (
-                     <div className="bg-gray-700/50 p-4 rounded-lg text-center animate-pulse">
+                     <div className="bg-gray-700/50 p-4 rounded-lg text-center animate-pulse" aria-live="polite">
                         <p className="font-semibold text-white">
                             {mechanicMode === 'diagnose' ? "L'IA sta elaborando la diagnosi..." : "L'IA sta generando la checklist..."}
                         </p>
@@ -211,17 +216,21 @@ const VirtualMechanic: React.FC = () => {
                             <h3 className="text-xl font-bold text-white">Risultato Diagnosi</h3>
                             <div className="flex items-center gap-2 flex-wrap">
                                 {savedConfirmation && <span className="text-green-400 text-sm animate-pulse mr-2">{savedConfirmation}</span>}
-                                <ActionButton onClick={handleSaveOrUpdateDiagnosis}>
-                                    <ArchiveBoxIcon className="w-5 h-5"/> {activeDiagnosisId ? 'Aggiorna' : 'Salva'} Diagnosi
-                                </ActionButton>
-                                <ActionButton 
-                                    onClick={handleDownloadDiagnosisPdf} 
-                                    loading={isGeneratingDiagnosisPdf} 
-                                    loadingText="Creando..."
-                                    className="bg-teal-600 hover:bg-teal-500"
-                                >
-                                    <ArrowDownTrayIcon className="w-5 h-5"/> Scarica PDF
-                                </ActionButton>
+                                <Tooltip text={activeDiagnosisId ? 'Aggiorna la diagnosi salvata con il risultato corrente' : 'Salva questa diagnosi nello storico del veicolo'}>
+                                    <ActionButton onClick={handleSaveOrUpdateDiagnosis}>
+                                        <ArchiveBoxIcon className="w-5 h-5"/> {activeDiagnosisId ? 'Aggiorna' : 'Salva'} Diagnosi
+                                    </ActionButton>
+                                </Tooltip>
+                                <Tooltip text="Esporta la diagnosi corrente in un file PDF">
+                                    <ActionButton 
+                                        onClick={handleDownloadDiagnosisPdf} 
+                                        loading={isGeneratingDiagnosisPdf} 
+                                        loadingText="Creando..."
+                                        className="bg-teal-600 hover:bg-teal-500"
+                                    >
+                                        <ArrowDownTrayIcon className="w-5 h-5"/> Scarica PDF
+                                    </ActionButton>
+                                </Tooltip>
                             </div>
                         </div>
                         <div className="whitespace-pre-wrap">{diagnosis}</div>
@@ -232,19 +241,21 @@ const VirtualMechanic: React.FC = () => {
                     <div className="animate-fade-in">
                         <div className="flex justify-between items-center mb-4">
                              <h3 className="text-xl font-bold text-white">Checklist Manutenzione</h3>
-                             <ActionButton
-                                onClick={handleDownloadChecklistPdf}
-                                loading={isGeneratingChecklistPdf}
-                                loadingText="Creando..."
-                                className="bg-teal-600 hover:bg-teal-500"
-                            >
-                                <ArrowDownTrayIcon className="w-5 h-5"/> Scarica PDF
-                            </ActionButton>
+                             <Tooltip text="Esporta la checklist corrente in un file PDF">
+                                <ActionButton
+                                    onClick={handleDownloadChecklistPdf}
+                                    loading={isGeneratingChecklistPdf}
+                                    loadingText="Creando..."
+                                    className="bg-teal-600 hover:bg-teal-500"
+                                >
+                                    <ArrowDownTrayIcon className="w-5 h-5"/> Scarica PDF
+                                </ActionButton>
+                            </Tooltip>
                         </div>
                         <div className="space-y-4">
-                            <MaintenanceList title="Controlli Essenziali" items={maintenanceTips.controlli_essenziali} />
-                            <MaintenanceList title="Suggerimenti Specifici per il Viaggio" items={maintenanceTips.suggerimenti_specifici_viaggio} />
-                            <MaintenanceList title="Equipaggiamento d'Emergenza" items={maintenanceTips.equipaggiamento_emergenza} />
+                            <MaintenanceList title="Controlli Essenziali" items={maintenanceTips.essentialChecks} />
+                            <MaintenanceList title="Suggerimenti Specifici per il Viaggio" items={maintenanceTips.tripSpecificTips} />
+                            <MaintenanceList title="Equipaggiamento d'Emergenza" items={maintenanceTips.emergencyEquipment} />
                         </div>
                     </div>
                 )}

@@ -5,6 +5,7 @@ import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
 import { useAppContext } from '../../state/AppContext';
 import { useEscapeKey } from '../../utils/hooks';
+import Tooltip from '../../components/Tooltip';
 
 // Helper to convert file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -91,6 +92,20 @@ const EditVehicleModal: React.FC<{
     const handlePhotoChange = async (e: ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
+            
+            // Production Optimization: Check image size to prevent storing large base64 strings
+            // in localStorage, which can degrade performance and hit storage limits.
+            if (file.size > 2 * 1024 * 1024) { // 2MB limit
+                // Using a simple alert for minimal code change. In a larger app,
+                // this would ideally trigger a non-blocking notification via context.
+                alert("L'immagine è troppo grande (max 2MB). Scegli un file più piccolo per ottimizzare le prestazioni dell'app.");
+                // Reset file input value to allow re-selection of the same file if needed after an error
+                if (e.target) {
+                    e.target.value = '';
+                }
+                return;
+            }
+
             const base64 = await fileToBase64(file);
             setFormData(prev => ({ ...prev, photo: base64 }));
             setPhotoPreview(base64);
@@ -234,13 +249,19 @@ const Garage: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0 mt-auto bg-black/20 p-2 rounded-b-lg">
-                                    <button onClick={() => handleSetActiveVehicle(v.id)} disabled={isActive} className="text-xs py-1 px-3 rounded-full font-semibold transition-colors bg-gray-600 hover:bg-gray-500 disabled:bg-blue-600 disabled:opacity-100 disabled:cursor-default text-white flex-grow text-center">
-                                        {isActive ? 'Attivo' : 'Seleziona'}
-                                    </button>
-                                    <button onClick={() => setEditingVehicle(v)} className="text-gray-400 hover:text-white p-1.5 rounded-full transition-colors bg-gray-600 hover:bg-gray-500" aria-label={`Modifica ${v.model}`}><PencilSquareIcon className="w-4 h-4" /></button>
-                                    <button onClick={() => openDeleteConfirmation(v.id)} className="text-gray-400 hover:text-red-400 p-1.5 rounded-full transition-colors bg-gray-600 hover:bg-gray-500" aria-label={`Elimina ${v.model}`}>
-                                        <TrashIcon className="w-4 h-4" />
-                                    </button>
+                                     <Tooltip text={isActive ? "Questo veicolo è già attivo" : "Imposta come veicolo attivo"} className="flex-grow">
+                                        <button onClick={() => handleSetActiveVehicle(v.id)} disabled={isActive} className="w-full text-xs py-1 px-3 rounded-full font-semibold transition-colors bg-gray-600 hover:bg-gray-500 disabled:bg-blue-600 disabled:opacity-100 disabled:cursor-default text-white text-center">
+                                            {isActive ? 'Attivo' : 'Seleziona'}
+                                        </button>
+                                    </Tooltip>
+                                    <Tooltip text="Modifica veicolo">
+                                        <button onClick={() => setEditingVehicle(v)} className="text-gray-400 hover:text-white p-1.5 rounded-full transition-colors bg-gray-600 hover:bg-gray-500" aria-label={`Modifica ${v.model}`}><PencilSquareIcon className="w-4 h-4" /></button>
+                                    </Tooltip>
+                                    <Tooltip text="Elimina veicolo">
+                                        <button onClick={() => openDeleteConfirmation(v.id)} className="text-gray-400 hover:text-red-400 p-1.5 rounded-full transition-colors bg-gray-600 hover:bg-gray-500" aria-label={`Elimina ${v.model}`}>
+                                            <TrashIcon className="w-4 h-4" />
+                                        </button>
+                                    </Tooltip>
                                 </div>
                             </div>
                         )

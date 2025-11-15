@@ -1,5 +1,5 @@
 import { GoogleGenAI, Part, Chat } from "@google/genai";
-import { ITINERARY_SCHEMA, Itinerary, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, MaintenanceRecord } from '../types';
+import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, MaintenanceRecord } from '../types';
 
 // --- SECURITY WARNING & PROXY ARCHITECTURE ---
 // In a production app, the API key must NEVER be exposed in the frontend.
@@ -49,6 +49,53 @@ const textApiProxy = async (model: string, contents: { parts: Part[] }) => {
          console.error("Text API Proxy Error:", e);
          throw new Error("Si è verificato un errore durante la generazione del testo da parte dell'IA.");
     }
+};
+
+
+// --- Mappers ---
+// This mapper function translates the Italian snake_case keys from the Gemini API response
+// into the English camelCase keys used throughout the MotoMentor application.
+// This provides a clean separation between the AI's output structure and the app's internal data model.
+const mapApiItineraryToAppItinerary = (apiResponse: any): Itinerary => {
+    if (!apiResponse || !apiResponse.programma_giornaliero || !Array.isArray(apiResponse.programma_giornaliero)) {
+        // Handle cases where the API response is not as expected.
+        console.error("Invalid itinerary response from API, 'programma_giornaliero' is missing or not an array:", apiResponse);
+        throw new Error("La risposta dell'IA non è nel formato atteso e non può essere elaborata.");
+    }
+
+    return {
+        tripTitle: apiResponse.titolo_viaggio,
+        generalDescription: apiResponse.descrizione_generale,
+        dailySchedule: apiResponse.programma_giornaliero.map((day: any): Day => ({
+            day: day.giorno,
+            stageTitle: day.titolo_tappa,
+            routeDescription: day.descrizione_percorso,
+            stageKilometers: day.chilometri_tappa,
+            activities: day.attivita_luoghi_interesse,
+            gpxTrack: day.tracciato_gpx, // Already in the correct format {lat, lon}
+            weatherForecast: {
+                temperatureMin: day.previsioni_meteo.temperatura_min,
+                temperatureMax: day.previsioni_meteo.temperatura_max,
+                conditions: day.previsioni_meteo.condizioni,
+                icon: day.previsioni_meteo.icona,
+            },
+            drivingTips: day.consigli_di_guida,
+            restaurantOption: day.opzione_ristoro,
+            accommodation: day.alloggio_consigliato,
+        }))
+    };
+};
+
+const mapApiMaintenanceTipsToApp = (apiResponse: any): MaintenanceTips => {
+    if (!apiResponse || !apiResponse.controlli_essenziali || !apiResponse.suggerimenti_specifici_viaggio || !apiResponse.equipaggiamento_emergenza) {
+        console.error("Invalid maintenance tips response from API:", apiResponse);
+        throw new Error("La checklist di manutenzione restituita dall'IA non è nel formato atteso.");
+    }
+    return {
+        essentialChecks: apiResponse.controlli_essenziali,
+        tripSpecificTips: apiResponse.suggerimenti_specifici_viaggio,
+        emergencyEquipment: apiResponse.equipaggiamento_emergenza,
+    };
 };
 
 
@@ -132,7 +179,7 @@ Fornisci una diagnosi probabile, una lista di possibili cause in ordine di proba
 };
 
 const buildMaintenanceTipsPrompt = (motorcycle: GarageVehicle, itinerary: Itinerary, maintenanceLog: MaintenanceRecord[]): string => {
-    const totalTripKm = itinerary.programma_giornaliero.reduce((total, day) => total + day.chilometri_tappa, 0);
+    const totalTripKm = itinerary.dailySchedule.reduce((total, day) => total + day.stageKilometers, 0);
     
     const maintenanceHistoryString = maintenanceLog.length > 0
     ? maintenanceLog
@@ -142,8 +189,8 @@ const buildMaintenanceTipsPrompt = (motorcycle: GarageVehicle, itinerary: Itiner
 
     return `Agisci come un meccanico di moto esperto e meticoloso.
 Prepara una checklist di manutenzione pre-viaggio per una ${motorcycle.model} del ${motorcycle.year} che ha attualmente ${motorcycle.kilometers} km.
-Il viaggio pianificato è: "${itinerary.titolo_viaggio}" della durata di ${itinerary.programma_giornaliero.length} giorni, per un totale di circa ${Math.round(totalTripKm)} km.
-Descrizione del viaggio: "${itinerary.descrizione_generale}".
+Il viaggio pianificato è: "${itinerary.tripTitle}" della durata di ${itinerary.dailySchedule.length} giorni, per un totale di circa ${Math.round(totalTripKm)} km.
+Descrizione del viaggio: "${itinerary.generalDescription}".
 
 **Storico Manutenzione del Veicolo:**
 Analizza attentamente il seguente storico dei lavori eseguiti per fornire consigli ancora più pertinenti. Confronta i chilometraggi e le date degli interventi con i km attuali della moto e la distanza/periodo del viaggio imminente.
@@ -176,7 +223,8 @@ export const generateItinerary = async (options: ItineraryOptions): Promise<Itin
         responseMimeType: "application/json",
         responseSchema: ITINERARY_SCHEMA,
     };
-    return await apiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] }, config) as Itinerary;
+    const apiResponse = await apiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] }, config);
+    return mapApiItineraryToAppItinerary(apiResponse);
 };
 
 export const diagnoseProblem = async (
@@ -204,7 +252,8 @@ export const getMaintenanceTips = async (
         responseMimeType: "application/json",
         responseSchema: MAINTENANCE_TIPS_SCHEMA,
     };
-    return await apiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] }, config) as MaintenanceTips;
+    const apiResponse = await apiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] }, config);
+    return mapApiMaintenanceTipsToApp(apiResponse);
 };
 
 export const createChatSession = (vehicle: GarageVehicle | null): Chat => {

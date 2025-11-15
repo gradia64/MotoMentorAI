@@ -6,8 +6,8 @@ import ChatHistoryModal from './ChatHistoryModal';
 import { ConfirmationModal } from '../Garage/Garage';
 
 const AiChat: React.FC = () => {
-    const { state, handleSendMessage, handleClearActiveChat } = useAppContext();
-    const { activeVehicle, chatHistory, isChatLoading } = state;
+    const { state, handleSendMessage, handleClearActiveChat, handleLoadChatHistory } = useAppContext();
+    const { activeVehicle, chatHistory, isChatLoading, chatHistoryList } = state;
     const [input, setInput] = useState('');
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
@@ -64,7 +64,12 @@ const AiChat: React.FC = () => {
                 title="Cancella Chat Corrente"
                 message="Sei sicuro di voler cancellare la cronologia di questa chat? L'azione è irreversibile."
             />
-            <ChatHistoryModal show={showHistoryModal} onClose={() => setShowHistoryModal(false)} />
+            <ChatHistoryModal 
+                show={showHistoryModal} 
+                onClose={() => setShowHistoryModal(false)}
+                history={chatHistoryList}
+                onLoad={handleLoadChatHistory}
+            />
             <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-bold mb-2">AI Chat</h2>

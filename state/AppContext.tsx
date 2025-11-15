@@ -3,7 +3,6 @@ import { Chat, Content } from '@google/genai';
 import { generateItinerary, diagnoseProblem, getMaintenanceTips, createChatSession } from '../services/geminiService';
 import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, Day, SavedTrip, MaintenanceRecord, MaintenanceReminder, SavedDiagnosis } from '../types';
 import { useLocalStorage } from '../utils/hooks';
-import { douglasPeucker } from '../utils/gpx';
 import { generatePdf } from '../utils/pdf';
 
 // --- STATE AND ACTION TYPES ---
@@ -62,7 +61,7 @@ interface AppState {
             departure: string;
             destination: string;
             duration: string;
-            tripPeriod: string;
+            period: string;
             roadPreference: string;
             customRoadPreferenceText: string;
             customPrompt: string;
@@ -131,7 +130,7 @@ const initialState: AppState = {
             departure: '',
             destination: '',
             duration: '',
-            tripPeriod: '',
+            period: '',
             roadPreference: 'Strade panoramiche e tortuose',
             customRoadPreferenceText: '',
             customPrompt: '',
@@ -195,17 +194,15 @@ interface AppContextType {
     loadTripFromHistory: (tripId: string) => void;
     deleteTripFromHistory: (tripId: string) => void;
     exportTripHistory: () => void;
+    importTripHistory: (file: File) => void;
     handleDownloadPdf: () => void;
-    exportDayGpx: (day: Day) => void;
-    showFullMap: () => void;
-    showDayMap: (day: Day) => void;
     handleAddMaintenanceRecord: (newRecordData: Omit<MaintenanceRecord, 'id'>) => void;
     handleDeleteMaintenanceRecord: (id: string) => void;
     handleAddReminder: (newReminderData: Omit<MaintenanceReminder, 'id'>) => void;
     handleDeleteReminder: (id: string) => void;
     handleSendMessage: (message: string) => Promise<void>;
     handleClearActiveChat: () => void;
-    handleDeleteChatHistory: (key: string) => void;
+    handleLoadChatHistory: (key: string) => void;
     handleSaveOrUpdateDiagnosis: () => void;
     handleLoadDiagnosis: (diagnosisId: string) => void;
     handleDeleteDiagnosis: (diagnosisId: string) => void;
@@ -307,7 +304,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         dispatch({ type: 'SET_ERROR', payload: null });
 
         const { tripPlanner } = state.drafts;
-        const { tripType, departure, destination, duration, tripPeriod } = tripPlanner;
+        const { tripType, departure, destination, duration, period } = tripPlanner;
 
         // --- 1. VALIDATION FIRST ---
         try {
@@ -320,7 +317,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (!duration || isNaN(parseInt(duration)) || parseInt(duration) <= 0) {
                 throw new Error("La durata deve essere un numero di giorni valido.");
             }
-            if (!tripPeriod.trim()) {
+            if (!period.trim()) {
                 throw new Error("Il 'Periodo del Viaggio' è un campo obbligatorio.");
             }
         } catch (err) {
@@ -342,7 +339,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const options = {
                     duration: tripPlanner.duration,
                     roadPreference: finalRoadPreference,
-                    period: tripPlanner.tripPeriod,
+                    period: tripPlanner.period,
                     motorcycle: state.activeVehicle ?? undefined,
                     customPrompt: tripPlanner.customPrompt,
                     ...(tripPlanner.tripType === 'itinerary'
@@ -354,7 +351,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 dispatch({ type: 'SET_ITINERARY', payload: { itinerary: result, tripId: null } });
 
                 if (state.activeVehicle && result) {
-                    const totalTripKm = result.programma_giornaliero.reduce((total, day) => total + day.chilometri_tappa, 0);
+                    const totalTripKm = result.dailySchedule.reduce((total, day) => total + day.stageKilometers, 0);
                     const currentKm = parseInt(state.activeVehicle.kilometers, 10);
                     const endOfTripKm = currentKm + totalTripKm;
                     const alerts = state.reminders
@@ -482,20 +479,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const isUpdating = state.activeTripId && state.tripHistory.some(trip => trip.id === state.activeTripId);
         
-        // Fix: Mapped the draft state ('tripPeriod') to the required 'SavedTrip' interface ('period')
-        // to resolve the type mismatch.
-        const { tripPlanner } = state.drafts;
-        const currentInputs = {
-            tripType: tripPlanner.tripType,
-            departure: tripPlanner.departure,
-            destination: tripPlanner.destination,
-            selectedTour: tripPlanner.selectedTour,
-            duration: tripPlanner.duration,
-            roadPreference: tripPlanner.roadPreference,
-            customRoadPreferenceText: tripPlanner.customRoadPreferenceText,
-            period: tripPlanner.tripPeriod,
-            customPrompt: tripPlanner.customPrompt,
-        };
+        const currentInputs = { ...state.drafts.tripPlanner };
 
         if (isUpdating) {
             updatedHistory = state.tripHistory.map(trip => 
@@ -558,6 +542,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         linkElement.click();
     }, [state.tripHistory]);
 
+    const importTripHistory = useCallback((file: File) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const content = event.target?.result;
+                if (typeof content !== 'string') throw new Error("Contenuto del file non valido.");
+
+                const importedData = JSON.parse(content);
+
+                if (!Array.isArray(importedData)) throw new Error("Il file JSON deve contenere un array di viaggi.");
+                
+                const validTrips: SavedTrip[] = importedData.filter(item => 
+                    item && typeof item === 'object' && 'id' in item && 'inputs' in item && 'itinerary' in item && 'tripTitle' in item.itinerary
+                );
+
+                if (validTrips.length === 0 && importedData.length > 0) {
+                    throw new Error("Nessun viaggio valido trovato nel file. Assicurati che il formato sia corretto.");
+                }
+
+                const existingIds = new Set(state.tripHistory.map(trip => trip.id));
+                const newTrips = validTrips.filter(trip => !existingIds.has(trip.id));
+
+                if (newTrips.length === 0) {
+                    showNotification("Nessun nuovo viaggio da importare. I viaggi potrebbero essere già presenti.", "success");
+                    return;
+                }
+
+                const mergedHistory = [...newTrips, ...state.tripHistory];
+                setStoredTripHistory(mergedHistory);
+                dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: mergedHistory }});
+                
+                showNotification(`${newTrips.length} viaggi importati con successo!`, 'success');
+
+            } catch (error) {
+                console.error("Errore durante l'importazione:", error);
+                const errorMessage = error instanceof Error ? error.message : "Impossibile leggere o analizzare il file JSON.";
+                showNotification(errorMessage, 'error');
+            }
+        };
+        reader.onerror = () => {
+            showNotification("Errore durante la lettura del file.", 'error');
+        };
+        reader.readAsText(file);
+    }, [state.tripHistory, setStoredTripHistory, showNotification]);
 
     // --- PDF & GPX HANDLERS ---
     const handleDownloadPdf = useCallback(() => {
@@ -566,28 +594,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         dispatch({ type: 'SET_ERROR', payload: null });
         try {
             generatePdf(
-                `itinerario-${state.itinerary.titolo_viaggio.replace(/\s/g, '_')}.pdf`,
-                state.itinerary.titolo_viaggio,
+                `itinerario-${state.itinerary.tripTitle.replace(/\s/g, '_')}.pdf`,
+                state.itinerary.tripTitle,
                 ({ addWrappedText, addSeparator }) => {
-                    addWrappedText(state.itinerary!.descrizione_generale, { size: 12, color: [100], marginBottom: 5 });
+                    addWrappedText(state.itinerary!.generalDescription, { size: 12, color: [100], marginBottom: 5 });
                     addSeparator({ marginTop: 0, marginBottom: 5 });
                     
-                    state.itinerary?.programma_giornaliero.forEach((day, index) => {
-                         addWrappedText(`Giorno ${day.giorno}: ${day.titolo_tappa}`, { size: 16, color: [0, 105, 217], marginBottom: 2 });
-                         addWrappedText(day.descrizione_percorso, { size: 11 });
+                    state.itinerary?.dailySchedule.forEach((day, index) => {
+                         addWrappedText(`Giorno ${day.day}: ${day.stageTitle}`, { size: 16, color: [0, 105, 217], marginBottom: 2 });
+                         addWrappedText(day.routeDescription, { size: 11 });
                          
                          addWrappedText("Attività e Luoghi di Interesse:", { size: 12, color: [40], marginBottom: 2 });
-                         day.attivita_luoghi_interesse.forEach(activity => {
+                         day.activities.forEach(activity => {
                              addWrappedText(`• ${activity}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 });
                          });
 
                          addWrappedText("Dettagli Tappa:", { size: 12, color: [40], marginBottom: 2 });
-                         addWrappedText(`Chilometri: ${day.chilometri_tappa} km`, { isListItem: true, size: 10, color: [100], marginBottom: 1 });
-                         addWrappedText(`Consigli di Guida: ${day.consigli_di_guida}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 });
-                         addWrappedText(`Ristoro: ${day.opzione_ristoro}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 });
-                         addWrappedText(`Alloggio: ${day.alloggio_consigliato}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 });
+                         addWrappedText(`Chilometri: ${day.stageKilometers} km`, { isListItem: true, size: 10, color: [100], marginBottom: 1 });
+                         addWrappedText(`Consigli di Guida: ${day.drivingTips}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 });
+                         addWrappedText(`Ristoro: ${day.restaurantOption}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 });
+                         addWrappedText(`Alloggio: ${day.accommodation}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 });
 
-                         if (index < state.itinerary!.programma_giornaliero.length - 1) {
+                         if (index < state.itinerary!.dailySchedule.length - 1) {
                             addSeparator({ marginTop: 5, marginBottom: 5 });
                          }
                     });
@@ -601,40 +629,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             dispatch({ type: 'SET_PDF_GENERATING', payload: false });
         }
     }, [state.itinerary, showNotification]);
-
-    const exportDayGpx = useCallback((day: Day) => {
-        // ... GPX export logic (same as before)
-    }, []);
-    
-    const showFullMap = useCallback(() => {
-        // ... Full map logic (same as before)
-    }, [state.itinerary]);
-
-    const showDayMap = useCallback((day: Day) => {
-        const points = day.tracciato_gpx;
-        if (!points || points.length < 2) {
-            alert("Dati GPX insufficienti per visualizzare la mappa del giorno.");
-            return;
-        }
-    
-        const origin = points[0];
-        const destination = points[points.length - 1];
-        let waypoints = points.slice(1, -1);
-        
-        const MAX_WAYPOINTS = 23;
-        
-        if (waypoints.length > MAX_WAYPOINTS) {
-            const epsilon = 0.001;
-            waypoints = douglasPeucker(waypoints, epsilon);
-            if (waypoints.length > MAX_WAYPOINTS) {
-                 waypoints = waypoints.slice(0, MAX_WAYPOINTS);
-            }
-        }
-    
-        const waypointsString = waypoints.map(p => `${p.lat},${p.lon}`).join('|');
-        const mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lon}&destination=${destination.lat},${destination.lon}&waypoints=${waypointsString}&travelmode=driving`;
-        window.open(mapUrl, '_blank');
-    }, []);
 
     // --- MAINTENANCE & REMINDERS ---
     const handleAddMaintenanceRecord = useCallback((newRecordData: Omit<MaintenanceRecord, 'id'>) => {
@@ -776,16 +770,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     addWrappedText(`Veicolo: ${state.activeVehicle!.model} (${state.activeVehicle!.year}) - ${Number(state.activeVehicle!.kilometers).toLocaleString('it-IT')} km`, { size: 11, color: [100], marginBottom: 5 });
                     addSeparator({ marginTop: 0, marginBottom: 5 });
 
-                    const { controlli_essenziali, suggerimenti_specifici_viaggio, equipaggiamento_emergenza } = state.maintenanceTips!;
+                    const { essentialChecks, tripSpecificTips, emergencyEquipment } = state.maintenanceTips!;
                     
                     addWrappedText("Controlli Essenziali", { size: 14, color: [40], marginBottom: 2 });
-                    controlli_essenziali.forEach(item => addWrappedText(`• ${item}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 }));
+                    essentialChecks.forEach(item => addWrappedText(`• ${item}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 }));
                     
                     addWrappedText("Suggerimenti Specifici per il Viaggio", { size: 14, color: [40], marginBottom: 4 });
-                    suggerimenti_specifici_viaggio.forEach(item => addWrappedText(`• ${item}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 }));
+                    tripSpecificTips.forEach(item => addWrappedText(`• ${item}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 }));
                     
                     addWrappedText("Equipaggiamento d'Emergenza", { size: 14, color: [40], marginBottom: 4 });
-                    equipaggiamento_emergenza.forEach(item => addWrappedText(`• ${item}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 }));
+                    emergencyEquipment.forEach(item => addWrappedText(`• ${item}`, { isListItem: true, size: 10, color: [100], marginBottom: 1 }));
                 }
             );
         } catch (err) {
@@ -881,23 +875,47 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         showNotification("Chat cancellata.", "success");
     }, [state.activeVehicle, showNotification]);
-
-    const handleDeleteChatHistory = useCallback((key: string) => {
-        const currentKey = `motoMentorChatHistory_${state.activeVehicle?.id || 'default'}`;
+    
+    const handleLoadChatHistory = useCallback((key: string) => {
+        const vehicleId = key.replace('motoMentorChatHistory_', '');
+    
+        const targetVehicle = vehicleId === 'default' ? null : state.garageVehicles.find(v => v.id === vehicleId) || null;
         
-        // Directly modify localStorage, then force a re-sync of the list from storage.
-        localStorage.removeItem(key);
-        refreshChatHistoryListRef.current();
-
-        // If the deleted chat was the one currently active, clear the UI.
-        if (key === currentKey) {
-            dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: [] } });
-            dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: createChatSession(state.activeVehicle) } });
+        const currentActiveVehicleId = state.activeVehicle?.id || 'default';
+        const targetVehicleId = targetVehicle?.id || 'default';
+    
+        if (currentActiveVehicleId === targetVehicleId) {
+            showNotification("Questa chat è già attiva.", "success");
+            return;
         }
-        
-        showNotification("Cronologia chat eliminata.", "success");
-    }, [state.activeVehicle, showNotification]);
-
+    
+        dispatch({ type: 'SET_CHAT_LOADING', payload: true });
+    
+        setStoredActiveId(targetVehicle?.id || null);
+        dispatch({ type: 'SET_DATA', payload: { key: 'activeVehicle', value: targetVehicle } });
+    
+        const newChatSession = createChatSession(targetVehicle);
+    
+        const savedHistoryJSON = localStorage.getItem(key);
+        let history: Content[] = [];
+        if (savedHistoryJSON) {
+            try {
+                const savedData = JSON.parse(savedHistoryJSON);
+                history = savedData.history || savedData;
+                if (!Array.isArray(history)) history = [];
+                newChatSession.history = history;
+            } catch (e) {
+                console.error("Failed to parse chat history for key:", key, e);
+                showNotification("Impossibile caricare la cronologia chat.", "error");
+            }
+        }
+    
+        dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: newChatSession } });
+        dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: history } });
+    
+        dispatch({ type: 'SET_CHAT_LOADING', payload: false });
+        showNotification("Chat caricata con successo!", "success");
+    }, [state.garageVehicles, state.activeVehicle, setStoredActiveId, showNotification]);
 
     const value = {
         state,
@@ -914,17 +932,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         loadTripFromHistory,
         deleteTripFromHistory,
         exportTripHistory,
+        importTripHistory,
         handleDownloadPdf,
-        exportDayGpx,
-        showFullMap,
-        showDayMap,
         handleAddMaintenanceRecord,
         handleDeleteMaintenanceRecord,
         handleAddReminder,
         handleDeleteReminder,
         handleSendMessage,
         handleClearActiveChat,
-        handleDeleteChatHistory,
+        handleLoadChatHistory,
         handleSaveOrUpdateDiagnosis,
         handleLoadDiagnosis,
         handleDeleteDiagnosis,

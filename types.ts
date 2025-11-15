@@ -34,35 +34,35 @@ export interface GpxPoint {
 }
 
 export interface WeatherForecast {
-    temperatura_min: number;
-    temperatura_max: number;
-    condizioni: string;
-    icona: string; 
+    temperatureMin: number;
+    temperatureMax: number;
+    conditions: string;
+    icon: string; 
 }
 
 export interface Day {
-    giorno: number;
-    titolo_tappa: string;
-    descrizione_percorso: string;
-    chilometri_tappa: number;
-    attivita_luoghi_interesse: string[];
-    tracciato_gpx: GpxPoint[];
-    previsioni_meteo: WeatherForecast;
-    consigli_di_guida: string;
-    opzione_ristoro: string;
-    alloggio_consigliato: string;
+    day: number;
+    stageTitle: string;
+    routeDescription: string;
+    stageKilometers: number;
+    activities: string[];
+    gpxTrack: GpxPoint[];
+    weatherForecast: WeatherForecast;
+    drivingTips: string;
+    restaurantOption: string;
+    accommodation: string;
 }
 
 export interface Itinerary {
-    titolo_viaggio: string;
-    descrizione_generale: string;
-    programma_giornaliero: Day[];
+    tripTitle: string;
+    generalDescription: string;
+    dailySchedule: Day[];
 }
 
 export interface MaintenanceTips {
-    controlli_essenziali: string[];
-    suggerimenti_specifici_viaggio: string[];
-    equipaggiamento_emergenza: string[];
+    essentialChecks: string[];
+    tripSpecificTips: string[];
+    emergencyEquipment: string[];
 }
 
 export interface GarageVehicle {
@@ -83,9 +83,9 @@ export interface SavedTrip {
         destination?: string;
         selectedTour?: string;
         duration: string;
+        period: string;
         roadPreference: string;
         customRoadPreferenceText?: string;
-        period: string;
         customPrompt?: string;
     };
     itinerary: Itinerary;

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Day } from '../../types';
-import { ArchiveBoxIcon, GlobeAltIcon, ArrowDownOnSquareIcon, BookOpenIcon, ClockIcon, BellAlertIcon, ShieldCheckIcon, BuildingStorefrontIcon, HomeIcon, ArrowDownTrayIcon, DocumentPlusIcon } from '@heroicons/react/24/outline';
+import { Day, GpxPoint } from '../../types';
+import { ArchiveBoxIcon, GlobeAltIcon, ArrowDownOnSquareIcon, BookOpenIcon, ClockIcon, BellAlertIcon, ShieldCheckIcon, BuildingStorefrontIcon, HomeIcon, ArrowDownTrayIcon, DocumentPlusIcon, MapIcon, QueueListIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
@@ -8,6 +8,10 @@ import WeatherIcon from '../../components/WeatherIcon';
 import InfoBlock from '../../components/InfoBlock';
 import TripHistoryModal from './TripHistoryModal';
 import { useAppContext } from '../../state/AppContext';
+import { createNavigationSegments, generateGpxFile, generateFullTripGpx, downloadFile } from '../../utils/mapsHelpers';
+import { useEscapeKey } from '../../utils/hooks';
+import SegmentNavigator from './SegmentNavigator';
+import Tooltip from '../../components/Tooltip';
 
 // --- CONSTANTS ---
 // Moved outside the component to prevent re-creation on every render.
@@ -28,6 +32,76 @@ const ROAD_PREFERENCES = [
 ];
 
 
+// --- NEW NAVIGATION OPTIONS MODAL ---
+const TripMapOptionsModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onQuickView: () => void;
+    onDetailedNav: () => void;
+    onDownloadGpx: () => void;
+}> = ({ isOpen, onClose, onQuickView, onDetailedNav, onDownloadGpx }) => {
+    useEscapeKey(onClose, isOpen);
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in" onClick={onClose}>
+            <div className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+                <div className="p-6">
+                    <div className="flex items-start gap-4">
+                        <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-900/50 sm:mx-0 sm:h-10 sm:w-10">
+                            <GlobeAltIcon className="h-6 w-6 text-blue-400" aria-hidden="true" />
+                        </div>
+                        <div className="mt-0 text-left">
+                            <h3 className="text-lg leading-6 font-bold text-white" id="modal-title">
+                                Opzioni Mappa Viaggio
+                            </h3>
+                            <p className="text-sm text-gray-400 mt-2">
+                                Scegli come visualizzare o esportare il tuo itinerario completo.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div className="p-6 pt-0 space-y-3">
+                    {/* Option 1: Quick Overview */}
+                    <button onClick={onQuickView} className="w-full text-left p-4 rounded-lg bg-gray-700 hover:bg-gray-600 transition-colors flex items-center gap-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-800">
+                        <MapIcon className="w-6 h-6 text-cyan-400 flex-shrink-0" />
+                        <div>
+                            <h4 className="font-bold text-white">Panoramica Veloce</h4>
+                            <p className="text-sm text-gray-400">Apri una singola mappa Google con le tappe principali del viaggio.</p>
+                        </div>
+                    </button>
+                    {/* Option 2: Detailed Navigation */}
+                    <button onClick={onDetailedNav} className="w-full text-left p-4 rounded-lg bg-gray-700 hover:bg-gray-600 transition-colors flex items-center gap-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-800">
+                         <QueueListIcon className="w-6 h-6 text-indigo-400 flex-shrink-0" />
+                        <div>
+                            <h4 className="font-bold text-white">Navigazione Dettagliata</h4>
+                            <p className="text-sm text-gray-400">Apri il percorso diviso in segmenti per la navigazione web.</p>
+                        </div>
+                    </button>
+                    {/* Option 3: Download GPX */}
+                    <button onClick={onDownloadGpx} className="w-full text-left p-4 rounded-lg bg-gray-700 hover:bg-gray-600 transition-colors flex items-center gap-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-800">
+                        <ArrowDownTrayIcon className="w-6 h-6 text-teal-400 flex-shrink-0" />
+                        <div>
+                            <h4 className="font-bold text-white">Scarica File GPX</h4>
+                            <p className="text-sm text-gray-400">Esporta il tracciato completo per il tuo navigatore GPS.</p>
+                        </div>
+                    </button>
+                </div>
+                <div className="p-4 bg-gray-700/50 flex flex-row-reverse">
+                    <ActionButton
+                        type="button"
+                        className="bg-gray-600 hover:bg-gray-500"
+                        onClick={onClose}
+                    >
+                        Chiudi
+                    </ActionButton>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 const TripPlanner: React.FC = () => {
     const { 
         state, 
@@ -37,12 +111,10 @@ const TripPlanner: React.FC = () => {
         handleSaveAndReset,
         loadLastItinerary,
         handleDownloadPdf,
-        exportDayGpx,
-        showFullMap,
-        showDayMap,
         loadTripFromHistory,
         deleteTripFromHistory,
-        exportTripHistory
+        exportTripHistory,
+        importTripHistory
     } = useAppContext();
 
     const {
@@ -61,7 +133,7 @@ const TripPlanner: React.FC = () => {
         departure,
         destination,
         duration,
-        tripPeriod,
+        period,
         roadPreference,
         customRoadPreferenceText,
         customPrompt,
@@ -72,10 +144,128 @@ const TripPlanner: React.FC = () => {
     };
     
     const [showHistory, setShowHistory] = useState(false);
+    const [isMapOptionsModalOpen, setIsMapOptionsModalOpen] = useState(false);
+    const [mapOptions, setMapOptions] = useState<{ onQuickView: () => void; onDetailedNav: () => void; onDownloadGpx: () => void; } | null>(null);
+    const [showSegmentNav, setShowSegmentNav] = useState(false);
+    const [selectedDayForNav, setSelectedDayForNav] = useState<Day | null>(null);
+
+    const handleQuickDownloadGpx = (day: Day) => {
+        const gpx = generateGpxFile(day);
+        downloadFile(
+            gpx,
+            `Giorno_${day.day}_${day.stageTitle.replace(/\s/g, '_')}.gpx`,
+            'application/gpx+xml'
+        );
+    };
+    
+    const handleShowDayMap = (day: Day) => {
+        const points = day.gpxTrack || [];
+        
+        if (points.length < 2) {
+            alert('Dati GPS insufficienti per visualizzare la mappa.');
+            return;
+        }
+    
+        const segments = createNavigationSegments(points, { maxWaypointsPerSegment: 9 });
+        
+        if (segments.length === 1 && segments[0]) {
+            // Solo 1 segmento - apri direttamente Google Maps
+            window.open(segments[0].mapUrl, '_blank');
+        } else if (segments.length > 1) {
+            // Multipli segmenti - mostra il navigator
+            setSelectedDayForNav(day);
+            setShowSegmentNav(true);
+        }
+    };
+    
+    const handleShowFullMap = () => {
+        if (!itinerary) return;
+
+        // --- Action 1: Quick Overview ---
+        const quickViewAction = () => {
+             const dailyDestinations = itinerary.dailySchedule
+                .map(day => day.gpxTrack?.[day.gpxTrack.length - 1])
+                .filter((p): p is GpxPoint => !!p);
+
+            if (dailyDestinations.length === 0) {
+                alert("Dati GPS insufficienti per creare una panoramica."); return;
+            }
+
+            const origin = itinerary.dailySchedule[0]?.gpxTrack?.[0];
+            if (!origin) {
+                alert("Punto di partenza del viaggio non trovato."); return;
+            }
+
+            const destination = dailyDestinations[dailyDestinations.length - 1];
+            const intermediateWaypoints = dailyDestinations.slice(0, -1);
+            
+            const waypointsStr = intermediateWaypoints.map(p => `${p.lat},${p.lon}`).join('|');
+            const url = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lon}&destination=${destination.lat},${destination.lon}&waypoints=${waypointsStr}&travelmode=driving`;
+            
+            window.open(url, '_blank');
+        };
+
+        // --- Action 2: Detailed Navigation ---
+        const detailedNavAction = () => {
+            const allSegmentsRaw = itinerary.dailySchedule.flatMap(day => {
+                const points = day.gpxTrack || [];
+                if (points.length < 2) return [];
+                return createNavigationSegments(points, { maxWaypointsPerSegment: 9 });
+            });
+            const allSegments = allSegmentsRaw.map((segment, index) => ({ ...segment, segmentNumber: index + 1 }));
+
+            if (allSegments.length === 0) {
+                alert("Nessun dato GPS navigabile trovato per l'intero viaggio."); return;
+            }
+            
+            if (allSegments.length === 1 && allSegments[0]) {
+                window.open(allSegments[0].mapUrl, '_blank');
+            } else {
+                allSegments.forEach((segment, index) => {
+                    setTimeout(() => window.open(segment.mapUrl, '_blank'), index * 500);
+                });
+            }
+        };
+
+        // --- Action 3: Download GPX ---
+        const downloadGpxAction = () => {
+            const gpx = generateFullTripGpx(itinerary.dailySchedule, itinerary.tripTitle);
+            downloadFile(
+                gpx,
+                `${itinerary.tripTitle.replace(/\s/g, '_')}_Completo.gpx`,
+                'application/gpx+xml'
+            );
+        };
+
+        setMapOptions({
+            onQuickView: () => { quickViewAction(); setIsMapOptionsModalOpen(false); },
+            onDetailedNav: () => { detailedNavAction(); setIsMapOptionsModalOpen(false); },
+            onDownloadGpx: () => { downloadGpxAction(); setIsMapOptionsModalOpen(false); },
+        });
+        setIsMapOptionsModalOpen(true);
+    };
 
     return (
         <div>
-            <TripHistoryModal show={showHistory} onClose={() => setShowHistory(false)} history={tripHistory} onLoad={loadTripFromHistory} onDelete={deleteTripFromHistory} onExport={exportTripHistory}/>
+            {mapOptions && (
+                <TripMapOptionsModal
+                    isOpen={isMapOptionsModalOpen}
+                    onClose={() => setIsMapOptionsModalOpen(false)}
+                    onQuickView={mapOptions.onQuickView}
+                    onDetailedNav={mapOptions.onDetailedNav}
+                    onDownloadGpx={mapOptions.onDownloadGpx}
+                />
+            )}
+            <TripHistoryModal show={showHistory} onClose={() => setShowHistory(false)} history={tripHistory} onLoad={loadTripFromHistory} onDelete={deleteTripFromHistory} onExport={exportTripHistory} onImport={importTripHistory}/>
+            {showSegmentNav && selectedDayForNav && (
+                <SegmentNavigator
+                    day={selectedDayForNav}
+                    onClose={() => {
+                        setShowSegmentNav(false);
+                        setSelectedDayForNav(null);
+                    }}
+                />
+            )}
 
             <div className="flex justify-center bg-gray-700 rounded-full p-1 mb-6 max-w-sm mx-auto">
                 <button onClick={() => setDraftValue('tripType', 'itinerary')} className={`px-4 py-1.5 w-1/2 rounded-full text-sm font-semibold transition ${tripType === 'itinerary' ? 'bg-blue-600 text-white' : 'text-gray-300'}`}>Itinerario A/R</button>
@@ -97,7 +287,7 @@ const TripPlanner: React.FC = () => {
                     </>
                 )}
                 <InputField id="duration" label="Durata (giorni)" value={duration} onChange={(e) => setDraftValue('duration', e.target.value)} placeholder="Es. 7" required />
-                <InputField id="period" label="Periodo del Viaggio" value={tripPeriod} onChange={(e) => setDraftValue('tripPeriod', e.target.value)} placeholder="Es. Metà Luglio" required />
+                <InputField id="period" label="Periodo del Viaggio" value={period} onChange={(e) => setDraftValue('period', e.target.value)} placeholder="Es. Metà Luglio" required />
                 <div className="md:col-span-2">
                     <SelectField id="roadPreference" label="Tipo di Strade Preferite" value={roadPreference} onChange={(e) => setDraftValue('roadPreference', e.target.value)}>
                         {ROAD_PREFERENCES.map(pref => <option key={pref} value={pref}>{pref}</option>)}
@@ -133,14 +323,20 @@ const TripPlanner: React.FC = () => {
                     </div>
                 </div>
                 <div className="md:col-span-2 flex flex-wrap gap-4">
-                    <ActionButton type="submit" loading={isGeneratingItinerary} loadingText="Generazione...">Crea Itinerario</ActionButton>
-                    <ActionButton onClick={loadLastItinerary} disabled={isGeneratingItinerary || tripHistory.length === 0}><ClockIcon className="w-5 h-5"/>Carica Ultimo</ActionButton>
-                    <ActionButton onClick={() => setShowHistory(true)} disabled={isGeneratingItinerary} className="bg-gray-600 hover:bg-gray-500"><BookOpenIcon className="w-5 h-5"/>Storico Viaggi</ActionButton>
+                    <Tooltip text="Genera un nuovo itinerario in base ai parametri inseriti">
+                        <ActionButton type="submit" loading={isGeneratingItinerary} loadingText="Generazione...">Crea Itinerario</ActionButton>
+                    </Tooltip>
+                    <Tooltip text="Ricarica l'ultimo itinerario che hai salvato o generato">
+                        <ActionButton onClick={loadLastItinerary} disabled={isGeneratingItinerary || tripHistory.length === 0}><ClockIcon className="w-5 h-5"/>Carica Ultimo</ActionButton>
+                    </Tooltip>
+                    <Tooltip text="Visualizza, carica o elimina i viaggi salvati in precedenza">
+                        <ActionButton onClick={() => setShowHistory(true)} disabled={isGeneratingItinerary} className="bg-gray-600 hover:bg-gray-500"><BookOpenIcon className="w-5 h-5"/>Storico Viaggi</ActionButton>
+                    </Tooltip>
                 </div>
             </form>
             
             {isGeneratingItinerary && (
-                <div className="mt-6 bg-gray-700/50 p-4 rounded-lg text-center animate-pulse">
+                <div className="mt-6 bg-gray-700/50 p-4 rounded-lg text-center animate-pulse" aria-live="polite">
                     <p className="font-semibold text-white">L'IA sta generando il tuo itinerario personalizzato...</p>
                     <p className="text-gray-400 text-sm mt-1">Questa operazione potrebbe richiedere alcuni istanti.</p>
                 </div>
@@ -161,48 +357,60 @@ const TripPlanner: React.FC = () => {
                     <div id="itinerary-content">
                         <div className="flex justify-between items-start mb-4 flex-wrap gap-2">
                             <div className="flex-1">
-                                <h2 className="text-2xl font-bold text-white">{itinerary.titolo_viaggio}</h2>
-                                <p className="text-gray-400 mt-1">{itinerary.descrizione_generale}</p>
+                                <h2 className="text-2xl font-bold text-white">{itinerary.tripTitle}</h2>
+                                <p className="text-gray-400 mt-1">{itinerary.generalDescription}</p>
                             </div>
                             <div className="flex gap-2 items-center flex-wrap self-start">
                                 {savedConfirmation && <span className="text-green-400 text-sm animate-pulse mr-2">{savedConfirmation}</span>}
-                                <ActionButton onClick={saveItinerary}><ArchiveBoxIcon className="w-5 h-5"/> Salva</ActionButton>
-                                <ActionButton onClick={handleSaveAndReset} className="bg-indigo-600 hover:bg-indigo-500"><DocumentPlusIcon className="w-5 h-5"/> Salva e Nuovo</ActionButton>
-                                <ActionButton onClick={handleDownloadPdf} loading={isGeneratingPdf} loadingText="Creando..." className="bg-teal-600 hover:bg-teal-500">
-                                    <ArrowDownTrayIcon className="w-5 h-5"/> Scarica PDF
-                                </ActionButton>
-                                <ActionButton onClick={showFullMap} className="bg-green-600 hover:bg-green-500"><GlobeAltIcon className="w-5 h-5"/> Mappa</ActionButton>
+                                <Tooltip text="Salva l'itinerario corrente nello storico">
+                                    <ActionButton onClick={saveItinerary}><ArchiveBoxIcon className="w-5 h-5"/> Salva</ActionButton>
+                                </Tooltip>
+                                <Tooltip text="Salva l'itinerario e resetta il form per crearne uno nuovo">
+                                    <ActionButton onClick={handleSaveAndReset} className="bg-indigo-600 hover:bg-indigo-500"><DocumentPlusIcon className="w-5 h-5"/> Salva e Nuovo</ActionButton>
+                                </Tooltip>
+                                <Tooltip text="Esporta l'itinerario in un file PDF stampabile">
+                                    <ActionButton onClick={handleDownloadPdf} loading={isGeneratingPdf} loadingText="Creando..." className="bg-teal-600 hover:bg-teal-500">
+                                        <ArrowDownTrayIcon className="w-5 h-5"/> Scarica PDF
+                                    </ActionButton>
+                                </Tooltip>
+                                <Tooltip text="Visualizza la mappa dell'intero viaggio o scarica il file GPX">
+                                    <ActionButton onClick={handleShowFullMap} className="bg-green-600 hover:bg-green-500"><GlobeAltIcon className="w-5 h-5"/> Mappa Viaggio</ActionButton>
+                                </Tooltip>
                             </div>
                         </div>
                         <div className="space-y-4">
-                            {itinerary.programma_giornaliero.map((day, index) => (
+                            {itinerary.dailySchedule.map((day, index) => (
                                 <div key={index} className={`day-container ${index % 2 === 0 ? 'bg-gray-700/50' : 'bg-gray-600/50'} p-4 rounded-lg`}>
                                     <div className="flex justify-between items-start">
-                                        <h3 className="text-xl font-semibold text-blue-400">Giorno {day.giorno}: {day.titolo_tappa}</h3>
+                                        <h3 className="text-xl font-semibold text-blue-400">Giorno {day.day}: {day.stageTitle}</h3>
                                         <div className="flex gap-2">
-                                            <ActionButton onClick={() => showDayMap(day)} className="bg-gray-600 hover:bg-gray-500 text-xs py-1 px-2"><GlobeAltIcon className="w-4 h-4"/> Mappa Giorno</ActionButton>
-                                            <ActionButton onClick={() => exportDayGpx(day)} className="bg-gray-600 hover:bg-gray-500 text-xs py-1 px-2"><ArrowDownOnSquareIcon className="w-4 h-4"/> GPX</ActionButton>
+                                            <Tooltip text="Apri la mappa di questa tappa in Google Maps">
+                                                <ActionButton onClick={() => handleShowDayMap(day)} className="bg-gray-600 hover:bg-gray-500 text-xs py-1 px-2"><GlobeAltIcon className="w-4 h-4"/> Mappa Tappa</ActionButton>
+                                            </Tooltip>
+                                            <Tooltip text="Scarica il file GPX di questa tappa per il tuo navigatore">
+                                                <ActionButton onClick={() => handleQuickDownloadGpx(day)} className="bg-gray-600 hover:bg-gray-500 text-xs py-1 px-2" title="Scarica GPX per navigatori"><ArrowDownOnSquareIcon className="w-4 h-4"/> GPX</ActionButton>
+                                            </Tooltip>
                                         </div>
                                     </div>
                                     <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-gray-400 my-2">
-                                        <span>{day.chilometri_tappa} km stimati</span>
-                                        {day.previsioni_meteo && (
+                                        <span>{day.stageKilometers} km stimati</span>
+                                        {day.weatherForecast && (
                                             <div className="flex items-center gap-1.5 border-l border-gray-600 pl-4">
-                                                <WeatherIcon iconName={day.previsioni_meteo.icona} />
-                                                <span>{day.previsioni_meteo.temperatura_min}° / {day.previsioni_meteo.temperatura_max}°C</span>
-                                                <span className="hidden sm:inline">- {day.previsioni_meteo.condizioni}</span>
+                                                <WeatherIcon iconName={day.weatherForecast.icon} />
+                                                <span>{day.weatherForecast.temperatureMin}° / {day.weatherForecast.temperatureMax}°C</span>
+                                                <span className="hidden sm:inline">- {day.weatherForecast.conditions}</span>
                                             </div>
                                         )}
                                     </div>
-                                    <p className="text-gray-300 my-2">{day.descrizione_percorso}</p>
+                                    <p className="text-gray-300 my-2">{day.routeDescription}</p>
                                     <h4 className="font-semibold text-gray-300 mt-3">Attività e Luoghi di Interesse:</h4>
                                     <ul className="list-disc list-inside text-gray-400 space-y-1 mt-1">
-                                        {day.attivita_luoghi_interesse.map((activity, i) => <li key={i}>{activity}</li>)}
+                                        {day.activities.map((activity, i) => <li key={i}>{activity}</li>)}
                                     </ul>
                                     <div className="mt-4 pt-4 border-t border-gray-600/50 space-y-2">
-                                        <InfoBlock icon={ShieldCheckIcon} title="Consigli di Guida" content={day.consigli_di_guida} />
-                                        <InfoBlock icon={BuildingStorefrontIcon} title="Opzione Ristoro" content={day.opzione_ristoro} />
-                                        <InfoBlock icon={HomeIcon} title="Alloggio Consigliato" content={day.alloggio_consigliato} />
+                                        <InfoBlock icon={ShieldCheckIcon} title="Consigli di Guida" content={day.drivingTips} />
+                                        <InfoBlock icon={BuildingStorefrontIcon} title="Opzione Ristoro" content={day.restaurantOption} />
+                                        <InfoBlock icon={HomeIcon} title="Alloggio Consigliato" content={day.accommodation} />
                                     </div>
                                 </div>
                             ))}
