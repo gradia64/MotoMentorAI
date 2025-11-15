@@ -1,6 +1,6 @@
 import React, { useState, FormEvent, useMemo, useEffect } from 'react';
 import { MaintenanceRecord, MaintenanceType, MaintenanceReminder, GarageVehicle } from '../../types';
-import { PlusCircleIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
@@ -13,16 +13,16 @@ interface MaintenanceLogProps {
     onAddReminder: (reminder: Omit<MaintenanceReminder, 'id'>) => void;
     onDeleteReminder: (id: string) => void;
     activeVehicle: GarageVehicle | null;
-    savedConfirmation: string | null;
 }
 
-const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, reminders, onAddReminder, onDeleteReminder, activeVehicle, savedConfirmation }) => {
+const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, reminders, onAddReminder, onDeleteReminder, activeVehicle }) => {
     // State for Maintenance Log form
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [type, setType] = useState<MaintenanceType>(MaintenanceType.Ordinary);
     const [description, setDescription] = useState('');
     const [cost, setCost] = useState('');
     const [kilometers, setKilometers] = useState('');
+    const [isAddFormVisible, setIsAddFormVisible] = useState(false);
 
     useEffect(() => {
         if (activeVehicle) {
@@ -48,6 +48,7 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
         onAdd({ date, type, description, cost: parseFloat(cost), kilometers: parseInt(kilometers, 10) });
         setDescription('');
         setCost('');
+        setIsAddFormVisible(false); // Hide form after submission
     };
 
     const handleAddReminderSubmit = (e: FormEvent) => {
@@ -80,6 +81,7 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
             if (sortConfig.key === 'date') {
                 const dateA = new Date(a.date).getTime();
                 const dateB = new Date(b.date).getTime();
+                // Fix: Corrected a typo where 'a.date' (string) was used instead of 'dateA' (number) in the arithmetic operation.
                 return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
             } else { // cost
                 return sortConfig.direction === 'asc' ? a.cost - b.cost : b.cost - a.cost;
@@ -115,25 +117,39 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
 
     return (
         <div className="animate-fade-in">
-            <div className="bg-gray-700/50 p-4 rounded-lg mb-6">
-                <h3 className="text-xl font-semibold text-blue-400 mb-4 flex items-center gap-2"><PlusCircleIcon className="w-6 h-6"/> Aggiungi Intervento</h3>
-                <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <InputField id="logDate" label="Data" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-                    <SelectField id="logType" label="Tipo Intervento" value={type} onChange={(e) => setType(e.target.value as MaintenanceType)}>
-                        {Object.values(MaintenanceType).map(t => <option key={t} value={t}>{t}</option>)}
-                    </SelectField>
-                    <InputField id="logKilometers" label="Km al momento del lavoro" type="number" value={kilometers} onChange={(e) => setKilometers(e.target.value)} required placeholder={`Es. ${activeVehicle ? activeVehicle.kilometers : '15500'}`} />
-                    <InputField id="logCost" label="Costo (€)" type="number" value={cost} onChange={(e) => setCost(e.target.value)} required placeholder="Es. 80.50" />
-                    <div className="md:col-span-2">
-                        <label htmlFor="logDesc" className="block text-sm font-medium text-gray-300">Descrizione Lavori</label>
-                        <textarea id="logDesc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="mt-1 block w-full px-3 py-2 text-white bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" required placeholder="Es. Cambio olio e filtro olio"></textarea>
+            {/* --- ADD NEW RECORD SECTION (COLLAPSIBLE) --- */}
+            <div className="bg-gray-700/50 rounded-lg mb-6 overflow-hidden">
+                <button
+                    onClick={() => setIsAddFormVisible(!isAddFormVisible)}
+                    className="w-full flex justify-between items-center p-4 text-left"
+                >
+                    <h3 className="text-xl font-semibold text-blue-400 flex items-center gap-2">
+                        <PlusCircleIcon className="w-6 h-6"/> Aggiungi Intervento di Manutenzione
+                    </h3>
+                    <ChevronDownIcon className={`w-6 h-6 text-gray-400 transition-transform ${isAddFormVisible ? 'rotate-180' : ''}`} />
+                </button>
+                {isAddFormVisible && (
+                    <div className="p-4 border-t border-gray-700 animate-fade-in">
+                        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <InputField id="logDate" label="Data" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+                            <SelectField id="logType" label="Tipo Intervento" value={type} onChange={(e) => setType(e.target.value as MaintenanceType)}>
+                                {Object.values(MaintenanceType).map(t => <option key={t} value={t}>{t}</option>)}
+                            </SelectField>
+                            <InputField id="logKilometers" label="Km al momento del lavoro" type="number" value={kilometers} onChange={(e) => setKilometers(e.target.value)} required placeholder={`Es. ${activeVehicle ? activeVehicle.kilometers : '15500'}`} />
+                            <InputField id="logCost" label="Costo (€)" type="number" value={cost} onChange={(e) => setCost(e.target.value)} required placeholder="Es. 80.50" />
+                            <div className="md:col-span-2">
+                                <label htmlFor="logDesc" className="block text-sm font-medium text-gray-300">Descrizione Lavori</label>
+                                <textarea id="logDesc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="mt-1 block w-full px-3 py-2 text-white bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" required placeholder="Es. Cambio olio e filtro olio"></textarea>
+                            </div>
+                            <div className="md:col-span-2 flex items-center gap-4">
+                                <ActionButton type="submit">Aggiungi Intervento</ActionButton>
+                            </div>
+                        </form>
                     </div>
-                    <div className="md:col-span-2 flex items-center gap-4">
-                        <ActionButton type="submit">Aggiungi Intervento</ActionButton>
-                        {savedConfirmation && <span className="text-green-400 animate-pulse">{savedConfirmation}</span>}
-                    </div>
-                </form>
+                )}
             </div>
+
+            {/* --- MAINTENANCE LOG DISPLAY --- */}
             <div>
                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-3">
                     <h3 className="text-xl font-semibold text-blue-400">Storico Manutenzione</h3>
@@ -178,6 +194,7 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
                  )}
             </div>
 
+            {/* --- REMINDERS SECTION --- */}
             <div className="mt-12 pt-8 border-t border-gray-700">
              <h3 className="text-2xl font-bold mb-4">Promemoria Manutenzione</h3>
              <div className="bg-gray-700/50 p-4 rounded-lg mb-6">

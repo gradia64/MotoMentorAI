@@ -2,6 +2,7 @@ import React from 'react';
 import { XMarkIcon, TrashIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { SavedTrip } from '../../types';
 import ActionButton from '../../components/ActionButton';
+import { useEscapeKey } from '../../utils/hooks';
 
 interface TripHistoryModalProps {
     show: boolean;
@@ -13,14 +14,16 @@ interface TripHistoryModalProps {
 }
 
 const TripHistoryModal: React.FC<TripHistoryModalProps> = ({ show, onClose, history, onLoad, onDelete, onExport }) => {
+    useEscapeKey(onClose, show);
+    
     if (!show) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 animate-fade-in" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in" onClick={onClose}>
             <div className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                     <h3 className="text-xl font-bold text-white">Storico Viaggi</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white"><XMarkIcon className="w-6 h-6"/></button>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white" aria-label="Chiudi storico viaggi"><XMarkIcon className="w-6 h-6"/></button>
                 </div>
                 <div className="p-4 overflow-y-auto">
                     {history.length === 0 ? (
@@ -34,8 +37,20 @@ const TripHistoryModal: React.FC<TripHistoryModalProps> = ({ show, onClose, hist
                                         <p className="text-sm text-gray-400">{trip.inputs.duration} giorni - {trip.inputs.tripType === 'tour' ? trip.inputs.selectedTour : `${trip.inputs.departure} -> ${trip.inputs.destination}`}</p>
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
-                                        <button onClick={() => { onLoad(trip.id); onClose(); }} className="text-xs py-1 px-3 rounded-full font-semibold transition-colors bg-blue-600 hover:bg-blue-500 text-white">Carica</button>
-                                        <button onClick={() => onDelete(trip.id)} className="text-gray-500 hover:text-red-400 p-1 rounded-full transition-colors"><TrashIcon className="w-5 h-5"/></button>
+                                        <button 
+                                            onClick={() => { onLoad(trip.id); onClose(); }} 
+                                            className="text-xs py-1 px-3 rounded-full font-semibold transition-colors bg-blue-600 hover:bg-blue-500 text-white"
+                                            aria-label={`Carica ${trip.itinerary.titolo_viaggio}`}
+                                        >
+                                            Carica
+                                        </button>
+                                        <button 
+                                            onClick={() => onDelete(trip.id)} 
+                                            className="text-gray-500 hover:text-red-400 p-1 rounded-full transition-colors"
+                                            aria-label={`Elimina ${trip.itinerary.titolo_viaggio}`}
+                                        >
+                                            <TrashIcon className="w-5 h-5"/>
+                                        </button>
                                     </div>
                                 </div>
                             ))}

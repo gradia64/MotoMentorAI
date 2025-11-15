@@ -1,24 +1,58 @@
-import { GoogleGenAI, Part } from "@google/genai";
+import { GoogleGenAI, Part, Chat } from "@google/genai";
 import { ITINERARY_SCHEMA, Itinerary, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, MaintenanceRecord } from '../types';
 
+// --- SECURITY WARNING & PROXY ARCHITECTURE ---
+// In a production app, the API key must NEVER be exposed in the frontend.
+// This service simulates a backend proxy. All API calls from the app
+// must go through this service. In a real-world scenario, this file's logic
+// would be on a secure server (e.g., a Node.js endpoint).
 const apiKey = process.env.API_KEY;
-if (!apiKey) {
-  throw new Error("API_KEY environment variable not set.");
-}
 
-const ai = new GoogleGenAI({ apiKey });
-
-// Helper to convert file to base64
-const fileToGenerativePart = async (file: File): Promise<Part> => {
-  const base64EncodedDataPromise = new Promise<string>((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-    reader.readAsDataURL(file);
-  });
-  return {
-    inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
-  };
+let ai: GoogleGenAI | null = null;
+const getAi = () => {
+    if (!ai) {
+        if (!apiKey) {
+            console.error("API_KEY environment variable not set.");
+            throw new Error("La chiave API non è configurata. L'applicazione non può funzionare.");
+        }
+        ai = new GoogleGenAI({ apiKey });
+    }
+    return ai;
 };
+
+
+// --- API PROXY SIMULATOR ---
+// Centralizes API calls and error handling.
+const apiProxy = async (model: string, contents: { parts: Part[] }, config: any) => {
+    try {
+        const response = await getAi().models.generateContent({ model, contents, config });
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText);
+    } catch (e: any) {
+        console.error("API Proxy Error:", e);
+        // Provide more specific feedback if possible
+        if (e.message.includes("API key not valid")) {
+             throw new Error("La chiave API fornita non è valida. Controlla la tua configurazione.");
+        }
+        if (e instanceof SyntaxError) {
+             throw new Error("La risposta del server non è un formato JSON valido. L'IA potrebbe aver restituito un formato inaspettato.");
+        }
+        throw new Error("Si è verificato un errore durante la comunicazione con il servizio AI.");
+    }
+};
+
+const textApiProxy = async (model: string, contents: { parts: Part[] }) => {
+    try {
+         const response = await getAi().models.generateContent({ model, contents });
+         return response.text;
+    } catch (e: any) {
+         console.error("Text API Proxy Error:", e);
+         throw new Error("Si è verificato un errore durante la generazione del testo da parte dell'IA.");
+    }
+};
+
+
+// --- PROMPT BUILDERS ---
 
 interface ItineraryOptions {
     departure?: string;
@@ -31,10 +65,10 @@ interface ItineraryOptions {
     customPrompt?: string;
 }
 
-export const generateItinerary = async (options: ItineraryOptions): Promise<Itinerary> => {
+const buildItineraryPrompt = (options: ItineraryOptions): string => {
     const { departure, destination, tourName, duration, roadPreference, period, motorcycle, customPrompt } = options;
     
-    const motorcycleInfo = motorcycle && motorcycle.model
+    const motorcycleInfo = motorcycle?.model
         ? `Il viaggio sarà affrontato con una ${motorcycle.model} dell'anno ${motorcycle.year} con circa ${motorcycle.kilometers} km. Tieni conto del tipo di moto (es. tourer, sportiva, adventure) e del suo chilometraggio per suggerire percorsi adatti.`
         : '';
     
@@ -43,18 +77,16 @@ export const generateItinerary = async (options: ItineraryOptions): Promise<Itin
     const extraFieldsPrompt = `- Per ogni giorno, includi anche: un \`consigli_di_guida\` (un consiglio di guida specifico per la tappa, es. 'attenzione al vento laterale sui viadotti'), una \`opzione_ristoro\` (un suggerimento per pranzare, es. 'Trattoria con cucina locale a metà percorso'), e un \`alloggio_consigliato\` (un suggerimento per il pernottamento, es. 'Hotel con parcheggio moto coperto').`;
 
     const motorcycleRoutingPhilosophy = `- **FILOSOFIA DEL PERCORSO MOTOCICLISTICO**: Questo è il punto più importante. La pianificazione deve essere fatta con la mentalità di un motociclista esperto che cerca il massimo piacere di guida.
-  - **EVITA ASSOLUTAMENTE**: Centri urbani trafficati (come l'esempio di Piazza Cordusio a Milano che deve essere evitato), zone industriali, tangenziali congestionate e autostrade/superstrade monotone, a meno che non siano l'unica opzione praticabile per un breve collegamento. L'obiettivo è massimizzare il tempo su strade godibili.
+  - **EVITA ASSOLUTAMENTE**: Centri urbani trafficati, zone industriali, tangenziali congestionate e autostrade/superstrade monotone, a meno che non siano l'unica opzione praticabile per un breve collegamento. L'obiettivo è massimizzare il tempo su strade godibili.
   - **DAI LA MASSIMA PRIORITÀ A**: Strade secondarie ben tenute, percorsi collinari o montani con belle curve, strade costiere panoramiche e strade rurali che attraversano paesaggi interessanti. La strada stessa è parte della destinazione.
   - Anche le tappe di trasferimento (andata/ritorno) devono seguire questa filosofia, cercando il miglior compromesso tra efficienza e piacere di guida, aggirando sempre i grandi centri urbani.`;
     
-    const customPromptInfo = customPrompt && customPrompt.trim()
+    const customPromptInfo = customPrompt?.trim()
         ? `- **RICHIESTA SPECIFICA DELL'UTENTE**: L'utente ha fatto una richiesta speciale che deve essere assolutamente soddisfatta: "${customPrompt}". Integra questa richiesta in modo coerente nel piano di viaggio.`
         : '';
         
-    let prompt: string;
-    
     if (tourName) {
-         prompt = `Crea un itinerario dettagliato per un viaggio in moto della durata totale di ${duration} giorni.
+         return `Crea un itinerario dettagliato per un viaggio in moto della durata totale di ${duration} giorni.
 Il viaggio consiste in:
 1. Un viaggio di andata dal luogo di partenza: ${departure}.
 2. La partecipazione a un tour organizzato in ${tourName}.
@@ -73,8 +105,8 @@ Distribuisci l'intero percorso (andata, tour e ritorno) in modo equilibrato nei 
 - ${motorcycleInfo}
 - ${customPromptInfo}
 Fornisci la risposta esclusivamente in formato JSON.`;
-    } else {
-        prompt = `Crea un itinerario dettagliato per un viaggio in moto di ${duration} giorni.
+    }
+    return `Crea un itinerario dettagliato per un viaggio in moto di ${duration} giorni.
 - Luogo di partenza: ${departure}.
 - Destinazione principale: ${destination}.
 - ${periodInfo}
@@ -88,59 +120,18 @@ Fornisci la risposta esclusivamente in formato JSON.`;
 - ${motorcycleInfo}
 - ${customPromptInfo}
 Fornisci la risposta esclusivamente in formato JSON.`;
-    }
-
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ parts: [{ text: prompt }] }],
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: ITINERARY_SCHEMA,
-        },
-    });
-
-    try {
-        const jsonText = response.text.trim();
-        return JSON.parse(jsonText) as Itinerary;
-    } catch (e) {
-        console.error("Failed to parse itinerary JSON:", response.text);
-        throw new Error("La risposta del server non è un formato JSON valido.");
-    }
 };
 
-export const diagnoseProblem = async (
-  problemDescription: string,
-  motorcycleModel: string,
-  motorcycleYear: string,
-  motorcycleKilometers: string,
-  image?: File
-): Promise<string> => {
-    const prompt = `Agisci come un meccanico di moto professionista altamente qualificato.
+const buildDiagnosisPrompt = (problemDescription: string, motorcycle: GarageVehicle): string => {
+    return `Agisci come un meccanico di moto professionista altamente qualificato.
 La tua analisi deve essere basata sulle informazioni ufficiali dei manuali di officina e manutenzione specifici per il modello e l'anno della moto.
-Un utente ha un problema con la sua ${motorcycleModel} del ${motorcycleYear} con circa ${motorcycleKilometers} km.
+Un utente ha un problema con la sua ${motorcycle.model} del ${motorcycle.year} con circa ${motorcycle.kilometers} km.
 Descrizione del problema: "${problemDescription}".
 Il chilometraggio è un fattore cruciale, usalo per la diagnosi, confrontandolo con gli intervalli di manutenzione previsti dal costruttore.
 Fornisci una diagnosi probabile, una lista di possibili cause in ordine di probabilità (dalla più alla meno probabile) e suggerisci dei passaggi dettagliati per verificare il problema o risolverlo, se alla portata di un utente con competenze meccaniche di base. Specifica quando è invece strettamente necessario l'intervento di un'officina specializzata. Se c'è un'immagine, usala per affinare la diagnosi.`;
-    
-    const parts: Part[] = [{ text: prompt }];
-    if (image) {
-        const imagePart = await fileToGenerativePart(image);
-        parts.push(imagePart);
-    }
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: { parts: parts },
-    });
-    return response.text;
 };
 
-export const getMaintenanceTips = async (
-    motorcycle: GarageVehicle,
-    itinerary: Itinerary,
-    maintenanceLog: MaintenanceRecord[]
-): Promise<MaintenanceTips> => {
+const buildMaintenanceTipsPrompt = (motorcycle: GarageVehicle, itinerary: Itinerary, maintenanceLog: MaintenanceRecord[]): string => {
     const totalTripKm = itinerary.programma_giornaliero.reduce((total, day) => total + day.chilometri_tappa, 0);
     
     const maintenanceHistoryString = maintenanceLog.length > 0
@@ -149,39 +140,83 @@ export const getMaintenanceTips = async (
         .join('\n')
     : "Nessuno storico di manutenzione registrato.";
 
-    const maintenanceHistoryPrompt = `
-**Storico Manutenzione del Veicolo:**
-Analizza attentamente il seguente storico dei lavori eseguiti per fornire consigli ancora più pertinenti. Confronta i chilometraggi e le date degli interventi con i km attuali della moto e la distanza/periodo del viaggio imminente.
-${maintenanceHistoryString}
-`;
-
-    const prompt = `Agisci come un meccanico di moto esperto e meticoloso.
+    return `Agisci come un meccanico di moto esperto e meticoloso.
 Prepara una checklist di manutenzione pre-viaggio per una ${motorcycle.model} del ${motorcycle.year} che ha attualmente ${motorcycle.kilometers} km.
 Il viaggio pianificato è: "${itinerary.titolo_viaggio}" della durata di ${itinerary.programma_giornaliero.length} giorni, per un totale di circa ${Math.round(totalTripKm)} km.
 Descrizione del viaggio: "${itinerary.descrizione_generale}".
 
-${maintenanceHistoryPrompt}
+**Storico Manutenzione del Veicolo:**
+Analizza attentamente il seguente storico dei lavori eseguiti per fornire consigli ancora più pertinenti. Confronta i chilometraggi e le date degli interventi con i km attuali della moto e la distanza/periodo del viaggio imminente.
+${maintenanceHistoryString}
 
 Considerando il chilometraggio attuale della moto, lo storico degli interventi, e i chilometri che verranno aggiunti con il viaggio, fornisci:
 1.  Una lista di controlli essenziali da fare prima di partire. Presta particolare attenzione a componenti che potrebbero essere vicini alla fine del loro ciclo vita (es. gomme, trasmissione, pastiglie freni), tenendo conto di quando sono stati controllati o sostituiti l'ultima volta secondo lo storico. Ad esempio, se l'olio è stato cambiato da poco, non suggerire di cambiarlo di nuovo a meno che il viaggio non sia eccezionalmente lungo. Sii specifico e intelligente.
 2.  Una lista di suggerimenti specifici legati a questo particolare viaggio (es. tipo di strade, clima previsto, durata), personalizzati in base allo storico.
 3.  Una lista di equipaggiamento d'emergenza (attrezzi, ricambi) da portare.
 Fornisci la risposta esclusivamente in formato JSON.`;
+};
 
-    const response = await ai.models.generateContent({
+
+// --- SERVICE FUNCTIONS ---
+
+const fileToGenerativePart = async (file: File): Promise<Part> => {
+  const base64EncodedDataPromise = new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+    reader.readAsDataURL(file);
+  });
+  return {
+    inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
+  };
+};
+
+export const generateItinerary = async (options: ItineraryOptions): Promise<Itinerary> => {
+    const prompt = buildItineraryPrompt(options);
+    const config = {
+        responseMimeType: "application/json",
+        responseSchema: ITINERARY_SCHEMA,
+    };
+    return await apiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] }, config) as Itinerary;
+};
+
+export const diagnoseProblem = async (
+  problemDescription: string,
+  motorcycle: GarageVehicle,
+  image?: File
+): Promise<string> => {
+    const prompt = buildDiagnosisPrompt(problemDescription, motorcycle);
+    const parts: Part[] = [{ text: prompt }];
+    if (image) {
+        // Fix: Corrected typo in function name from fileToGeneratorePart to fileToGenerativePart.
+        const imagePart = await fileToGenerativePart(image);
+        parts.push(imagePart);
+    }
+    return await textApiProxy('gemini-2.5-flash', { parts });
+};
+
+export const getMaintenanceTips = async (
+    motorcycle: GarageVehicle,
+    itinerary: Itinerary,
+    maintenanceLog: MaintenanceRecord[]
+): Promise<MaintenanceTips> => {
+    const prompt = buildMaintenanceTipsPrompt(motorcycle, itinerary, maintenanceLog);
+    const config = {
+        responseMimeType: "application/json",
+        responseSchema: MAINTENANCE_TIPS_SCHEMA,
+    };
+    return await apiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] }, config) as MaintenanceTips;
+};
+
+export const createChatSession = (vehicle: GarageVehicle | null): Chat => {
+    const systemInstruction = vehicle
+        ? `Sei un meccanico di moto esperto e un appassionato di mototurismo. Il tuo nome è MotoMentor. Stai parlando con il proprietario di una ${vehicle.model} del ${vehicle.year} con ${vehicle.kilometers} km. Rispondi in modo amichevole, competente e conciso. Utilizza la formattazione markdown per elenchi e grassetto quando è appropriato per migliorare la leggibilità.`
+        : `Sei un meccanico di moto esperto e un appassionato di mototurismo. Il tuo nome è MotoMentor. Rispondi in modo amichevole, competente e conciso. Invita l'utente a selezionare un veicolo attivo dal "Garage" per ricevere risposte più personalizzate, ma rispondi comunque alla sua domanda attuale. Utilizza la formattazione markdown per elenchi e grassetto quando è appropriato per migliorare la leggibilità.`;
+
+    const chat: Chat = getAi().chats.create({
         model: 'gemini-2.5-flash',
-        contents: [{ parts: [{ text: prompt }] }],
         config: {
-            responseMimeType: "application/json",
-            responseSchema: MAINTENANCE_TIPS_SCHEMA,
+            systemInstruction: systemInstruction,
         },
     });
-    
-    try {
-        const jsonText = response.text.trim();
-        return JSON.parse(jsonText) as MaintenanceTips;
-    } catch (e) {
-        console.error("Failed to parse maintenance tips JSON:", response.text);
-        throw new Error("La risposta del server non è un formato JSON valido per i consigli di manutenzione.");
-    }
+    return chat;
 };

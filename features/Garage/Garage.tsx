@@ -1,8 +1,10 @@
-import React, { useState, FormEvent, useEffect, ChangeEvent } from 'react';
+import React, { useState, FormEvent, ChangeEvent } from 'react';
 import { GarageVehicle } from '../../types';
 import { TrashIcon, XMarkIcon, PencilSquareIcon, PhotoIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
+import { useAppContext } from '../../state/AppContext';
+import { useEscapeKey } from '../../utils/hooks';
 
 // Helper to convert file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -14,8 +16,9 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
+
 // Confirmation Modal Component
-interface ConfirmationModalProps {
+export interface ConfirmationModalProps {
     isOpen: boolean;
     onClose: () => void;
     onConfirm: () => void;
@@ -23,11 +26,12 @@ interface ConfirmationModalProps {
     message: string;
 }
 
-const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, title, message }) => {
+export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, title, message }) => {
+    useEscapeKey(onClose, isOpen);
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 animate-fade-in" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in" onClick={onClose}>
             <div className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
                 <div className="p-6">
                     <div className="flex items-start gap-4">
@@ -77,6 +81,8 @@ const EditVehicleModal: React.FC<{
     const [formData, setFormData] = useState<GarageVehicle>(vehicle);
     const [photoPreview, setPhotoPreview] = useState<string | undefined>(vehicle.photo);
 
+    useEscapeKey(onClose);
+
     const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
         const { id, value } = e.target;
         setFormData(prev => ({ ...prev, [id]: value }));
@@ -98,12 +104,12 @@ const EditVehicleModal: React.FC<{
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 animate-fade-in" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in" onClick={onClose}>
             <div className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-2xl" onClick={e => e.stopPropagation()}>
                 <form onSubmit={handleSubmit}>
                     <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                         <h3 className="text-xl font-bold text-white">Modifica Veicolo</h3>
-                        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white"><XMarkIcon className="w-6 h-6"/></button>
+                        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white" aria-label="Chiudi modale"><XMarkIcon className="w-6 h-6"/></button>
                     </div>
                     <div className="p-6 space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -141,17 +147,9 @@ const EditVehicleModal: React.FC<{
 };
 
 
-export interface GarageProps {
-    vehicles: GarageVehicle[];
-    activeVehicleId: string | null;
-    onAddVehicle: (vehicle: Omit<GarageVehicle, 'id'>) => void;
-    onUpdateVehicle: (vehicle: GarageVehicle) => void;
-    onDeleteVehicle: (id: string) => void;
-    onSetActiveVehicle: (id: string) => void;
-    savedConfirmation: string | null;
-}
-
-const Garage: React.FC<GarageProps> = ({ vehicles, activeVehicleId, onAddVehicle, onUpdateVehicle, onDeleteVehicle, onSetActiveVehicle, savedConfirmation }) => {
+const Garage: React.FC = () => {
+    const { state, handleAddVehicle, handleUpdateVehicle, handleDeleteVehicle, handleSetActiveVehicle } = useAppContext();
+    const { garageVehicles, activeVehicle } = state;
     
     const [newVehicle, setNewVehicle] = useState({ model: '', year: '', kilometers: '' });
     const [editingVehicle, setEditingVehicle] = useState<GarageVehicle | null>(null);
@@ -165,7 +163,7 @@ const Garage: React.FC<GarageProps> = ({ vehicles, activeVehicleId, onAddVehicle
 
     const confirmDelete = () => {
         if (vehicleToDelete) {
-            onDeleteVehicle(vehicleToDelete);
+            handleDeleteVehicle(vehicleToDelete);
         }
     };
 
@@ -175,7 +173,7 @@ const Garage: React.FC<GarageProps> = ({ vehicles, activeVehicleId, onAddVehicle
             alert("Compila almeno Modello, Anno e Chilometri.");
             return;
         }
-        onAddVehicle(newVehicle);
+        handleAddVehicle(newVehicle);
         setNewVehicle({ model: '', year: '', kilometers: '' });
     };
 
@@ -185,7 +183,7 @@ const Garage: React.FC<GarageProps> = ({ vehicles, activeVehicleId, onAddVehicle
     
     return (
     <div className="animate-fade-in">
-        {editingVehicle && <EditVehicleModal vehicle={editingVehicle} onSave={onUpdateVehicle} onClose={() => setEditingVehicle(null)} />}
+        {editingVehicle && <EditVehicleModal vehicle={editingVehicle} onSave={handleUpdateVehicle} onClose={() => setEditingVehicle(null)} />}
         <ConfirmationModal
             isOpen={isDeleteModalOpen}
             onClose={() => setIsDeleteModalOpen(false)}
@@ -207,44 +205,46 @@ const Garage: React.FC<GarageProps> = ({ vehicles, activeVehicleId, onAddVehicle
                 </div>
                 <div className="flex items-center gap-4">
                     <ActionButton type="submit">Aggiungi Veicolo</ActionButton>
-                    {savedConfirmation && <span className="text-green-400 animate-pulse">{savedConfirmation}</span>}
                 </div>
             </form>
         </div>
 
         <div>
             <h3 className="text-xl font-bold mb-4 text-white">Veicoli Salvati</h3>
-            {vehicles.length === 0 ? (
+            {garageVehicles.length === 0 ? (
                 <p className="text-gray-400">Nessun veicolo nel garage.</p>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {vehicles.map(v => (
-                        <div key={v.id} className={`rounded-lg flex flex-col transition-all ${v.id === activeVehicleId ? 'bg-blue-600/20 ring-2 ring-blue-500' : 'bg-gray-700/50'}`}>
-                            <div className="flex p-3 gap-4 items-center">
-                                {v.photo ? (
-                                    <img src={v.photo} alt={v.model} className="w-20 h-20 object-cover rounded-md flex-shrink-0 bg-gray-800"/>
-                                ) : (
-                                     <div className="w-20 h-20 rounded-md bg-gray-800 flex items-center justify-center flex-shrink-0">
-                                        <PhotoIcon className="w-10 h-10 text-gray-500"/>
+                    {garageVehicles.map(v => {
+                        const isActive = v.id === activeVehicle?.id;
+                        return (
+                            <div key={v.id} className={`rounded-lg flex flex-col transition-all duration-300 ${isActive ? 'bg-blue-600/20 ring-2 ring-blue-500' : 'bg-gray-700/50 opacity-75 hover:opacity-100'}`}>
+                                <div className="flex p-3 gap-4 items-center">
+                                    {v.photo ? (
+                                        <img src={v.photo} alt={v.model} className="w-20 h-20 object-cover rounded-md flex-shrink-0 bg-gray-800"/>
+                                    ) : (
+                                         <div className="w-20 h-20 rounded-md bg-gray-800 flex items-center justify-center flex-shrink-0">
+                                            <PhotoIcon className="w-10 h-10 text-gray-500"/>
+                                        </div>
+                                    )}
+                                    <div className="flex-grow">
+                                        <p className="font-bold text-white">{v.model}</p>
+                                        <p className="text-sm text-gray-400">{v.year} - {Number(v.kilometers).toLocaleString('it-IT')} km</p>
+                                        {v.purchaseDate && <p className="text-xs text-gray-500 mt-1">Acquistata il: {new Date(v.purchaseDate).toLocaleDateString('it-IT')}</p>}
                                     </div>
-                                )}
-                                <div className="flex-grow">
-                                    <p className="font-bold text-white">{v.model}</p>
-                                    <p className="text-sm text-gray-400">{v.year} - {Number(v.kilometers).toLocaleString('it-IT')} km</p>
-                                    {v.purchaseDate && <p className="text-xs text-gray-500 mt-1">Acquistata il: {new Date(v.purchaseDate).toLocaleDateString('it-IT')}</p>}
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0 mt-auto bg-black/20 p-2 rounded-b-lg">
+                                    <button onClick={() => handleSetActiveVehicle(v.id)} disabled={isActive} className="text-xs py-1 px-3 rounded-full font-semibold transition-colors bg-gray-600 hover:bg-gray-500 disabled:bg-blue-600 disabled:opacity-100 disabled:cursor-default text-white flex-grow text-center">
+                                        {isActive ? 'Attivo' : 'Seleziona'}
+                                    </button>
+                                    <button onClick={() => setEditingVehicle(v)} className="text-gray-400 hover:text-white p-1.5 rounded-full transition-colors bg-gray-600 hover:bg-gray-500" aria-label={`Modifica ${v.model}`}><PencilSquareIcon className="w-4 h-4" /></button>
+                                    <button onClick={() => openDeleteConfirmation(v.id)} className="text-gray-400 hover:text-red-400 p-1.5 rounded-full transition-colors bg-gray-600 hover:bg-gray-500" aria-label={`Elimina ${v.model}`}>
+                                        <TrashIcon className="w-4 h-4" />
+                                    </button>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2 flex-shrink-0 mt-auto bg-black/20 p-2 rounded-b-lg">
-                                <button onClick={() => onSetActiveVehicle(v.id)} disabled={v.id === activeVehicleId} className="text-xs py-1 px-3 rounded-full font-semibold transition-colors bg-gray-600 hover:bg-gray-500 disabled:bg-blue-600 disabled:opacity-100 disabled:cursor-default text-white flex-grow text-center">
-                                    {v.id === activeVehicleId ? 'Attivo' : 'Seleziona'}
-                                </button>
-                                <button onClick={() => setEditingVehicle(v)} className="text-gray-400 hover:text-white p-1.5 rounded-full transition-colors bg-gray-600 hover:bg-gray-500"><PencilSquareIcon className="w-4 h-4" /></button>
-                                <button onClick={() => openDeleteConfirmation(v.id)} className="text-gray-400 hover:text-red-400 p-1.5 rounded-full transition-colors bg-gray-600 hover:bg-gray-500">
-                                    <TrashIcon className="w-4 h-4" />
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             )}
         </div>

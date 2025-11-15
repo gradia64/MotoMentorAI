@@ -4,6 +4,7 @@ export enum AiMode {
     TripPlanner = 'TripPlanner',
     VirtualMechanic = 'VirtualMechanic',
     Garage = 'Garage',
+    AiChat = 'AiChat',
 }
 
 export enum MaintenanceType {
@@ -88,6 +89,14 @@ export interface SavedTrip {
         customPrompt?: string;
     };
     itinerary: Itinerary;
+}
+
+export interface SavedDiagnosis {
+    id: string;
+    vehicleId: string;
+    date: string; // ISO string
+    problemDescription: string;
+    diagnosisText: string;
 }
 
 
