@@ -82,6 +82,7 @@ const mapApiItineraryToAppItinerary = (apiResponse: any): Itinerary => {
             drivingTips: day.consigli_di_guida,
             restaurantOption: day.opzione_ristoro,
             accommodation: day.alloggio_consigliato,
+            alternativeRouteSuggestion: day.suggerimento_strada_alternativa,
         }))
     };
 };
@@ -126,7 +127,8 @@ const buildItineraryPrompt = (options: ItineraryOptions): string => {
     const motorcycleRoutingPhilosophy = `- **FILOSOFIA DEL PERCORSO MOTOCICLISTICO**: Questo è il punto più importante. La pianificazione deve essere fatta con la mentalità di un motociclista esperto che cerca il massimo piacere di guida.
   - **EVITA ASSOLUTAMENTE**: Centri urbani trafficati, zone industriali, tangenziali congestionate e autostrade/superstrade monotone, a meno che non siano l'unica opzione praticabile per un breve collegamento. L'obiettivo è massimizzare il tempo su strade godibili.
   - **DAI LA MASSIMA PRIORITÀ A**: Strade secondarie ben tenute, percorsi collinari o montani con belle curve, strade costiere panoramiche e strade rurali che attraversano paesaggi interessanti. La strada stessa è parte della destinazione.
-  - Anche le tappe di trasferimento (andata/ritorno) devono seguire questa filosofia, cercando il miglior compromesso tra efficienza e piacere di guida, aggirando sempre i grandi centri urbani.`;
+  - Anche le tappe di trasferimento (andata/ritorno) devono seguire questa filosofia, cercando il miglior compromesso tra efficienza e piacere di guida, aggirando sempre i grandi centri urbani.
+  - **SUGGERIMENTI ALTERNATIVI**: Per ogni tappa, se possibile, proponi un \`suggerimento_strada_alternativa\`. Questa deve essere una deviazione o un'alternativa a una parte del percorso principale, pensata specificamente per il tipo di moto e le preferenze di guida. Ad esempio: se la moto è una tourer e la preferenza è 'panoramica', l'alternativa potrebbe essere un passo di montagna meno conosciuto ma spettacolare. Se la moto è una adventure e l'utente ha scelto 'mix avventura', l'alternativa potrebbe essere una 'strada bianca' (strada sterrata facile) che corre parallela all'asfalto. Se il percorso principale è veloce, l'alternativa potrebbe essere più lenta ma più ricca di curve. Sii creativo, specifico e pertinente. Se non ci sono buone alternative, lascia il campo vuoto.`;
     
     const customPromptInfo = customPrompt?.trim()
         ? `- **RICHIESTA SPECIFICA DELL'UTENTE**: L'utente ha fatto una richiesta speciale che deve essere assolutamente soddisfatta: "${customPrompt}". Integra questa richiesta in modo coerente nel piano di viaggio.`

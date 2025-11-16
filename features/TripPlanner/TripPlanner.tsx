@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Day, GpxPoint } from '../../types';
-import { ArchiveBoxIcon, GlobeAltIcon, ArrowDownOnSquareIcon, BookOpenIcon, ClockIcon, BellAlertIcon, ShieldCheckIcon, BuildingStorefrontIcon, HomeIcon, ArrowDownTrayIcon, DocumentPlusIcon, MapIcon, QueueListIcon } from '@heroicons/react/24/outline';
+import { ArchiveBoxIcon, GlobeAltIcon, ArrowDownOnSquareIcon, BookOpenIcon, ClockIcon, BellAlertIcon, ShieldCheckIcon, BuildingStorefrontIcon, HomeIcon, ArrowDownTrayIcon, DocumentPlusIcon, MapIcon, QueueListIcon, ArrowsRightLeftIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
@@ -408,6 +408,7 @@ const TripPlanner: React.FC = () => {
                                         {day.activities.map((activity, i) => <li key={i}>{activity}</li>)}
                                     </ul>
                                     <div className="mt-4 pt-4 border-t border-gray-600/50 space-y-2">
+                                        <InfoBlock icon={ArrowsRightLeftIcon} title="Suggerimento Alternativo" content={day.alternativeRouteSuggestion} />
                                         <InfoBlock icon={ShieldCheckIcon} title="Consigli di Guida" content={day.drivingTips} />
                                         <InfoBlock icon={BuildingStorefrontIcon} title="Opzione Ristoro" content={day.restaurantOption} />
                                         <InfoBlock icon={HomeIcon} title="Alloggio Consigliato" content={day.accommodation} />

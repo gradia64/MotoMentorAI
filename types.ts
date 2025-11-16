@@ -51,6 +51,7 @@ export interface Day {
     drivingTips: string;
     restaurantOption: string;
     accommodation: string;
+    alternativeRouteSuggestion?: string;
 }
 
 export interface Itinerary {
@@ -145,7 +146,11 @@ export const ITINERARY_SCHEMA = {
                     },
                     consigli_di_guida: { type: Type.STRING, description: "Un consiglio di guida specifico per la tappa del giorno, legato al tipo di strada o alle condizioni." },
                     opzione_ristoro: { type: Type.STRING, description: "Un suggerimento per un'opzione di ristoro lungo il percorso (es. 'Trattoria tipica', 'Area picnic panoramica')." },
-                    alloggio_consigliato: { type: Type.STRING, description: "Un suggerimento per il tipo di alloggio alla fine della tappa (es. 'Hotel con parcheggio moto', 'B&B accogliente')." }
+                    alloggio_consigliato: { type: Type.STRING, description: "Un suggerimento per il tipo di alloggio alla fine della tappa (es. 'Hotel con parcheggio moto', 'B&B accogliente')." },
+                    suggerimento_strada_alternativa: {
+                        type: Type.STRING,
+                        description: "Un suggerimento per un percorso alternativo per un tratto della tappa, basato sul tipo di moto e le preferenze di guida. Ad esempio, una deviazione panoramica, un passo di montagna più impegnativo o un breve tratto di sterrato se la moto è adatta. Lasciare vuoto se non ci sono alternative pertinenti."
+                    }
                 },
                 required: ["giorno", "titolo_tappa", "descrizione_percorso", "chilometri_tappa", "attivita_luoghi_interesse", "tracciato_gpx", "previsioni_meteo", "consigli_di_guida", "opzione_ristoro", "alloggio_consigliato"]
             }

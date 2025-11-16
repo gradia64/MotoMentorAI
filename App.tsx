@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline';
+import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 import { AiMode } from './types';
 import { AppProvider, useAppContext } from './state/AppContext';
@@ -66,8 +66,14 @@ const AppContent: React.FC = () => {
                     </div>
                 </div>
             </main>
-            <footer className="text-center py-4 text-sm text-gray-500">
+            <footer className="text-center py-4 px-4 text-sm text-gray-500">
                 <p>&copy; {new Date().getFullYear()} MotoMentor AI. Tutti i diritti riservati.</p>
+                <div className="mt-4 max-w-4xl mx-auto text-xs text-gray-600 flex items-start justify-center gap-2">
+                    <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5 text-yellow-600" />
+                    <p className="text-left">
+                        <strong>Avvertenza:</strong> MotoMentor è uno strumento basato sull'Intelligenza Artificiale e le informazioni fornite possono contenere errori o imprecisioni. I suggerimenti su itinerari, manutenzione e diagnosi sono generati automaticamente e devono essere considerati come un punto di partenza, non come un sostituto del giudizio professionale o della consultazione di un meccanico qualificato. L'autore non si assume alcuna responsabilità per danni diretti o indiretti, incidenti, o qualsiasi altra conseguenza derivante dall'uso delle informazioni fornite da questa applicazione. Utilizzare sempre il proprio giudizio e verificare le informazioni critiche.
+                    </p>
+                </div>
             </footer>
         </div>
     );
