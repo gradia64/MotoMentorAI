@@ -1,4 +1,5 @@
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import React from 'react';
 import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
@@ -77,6 +78,7 @@ const AppContent: React.FC = () => {
                 </div>
             </footer>
             <Analytics />
+            <SpeedInsights />
         </div>
     );
 };
