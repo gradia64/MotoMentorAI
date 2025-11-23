@@ -1,5 +1,3 @@
-import { Analytics } from '@vercel/analytics/react';
-import { SpeedInsights } from '@vercel/speed-insights/react';
 import React from 'react';
 import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
@@ -11,6 +9,7 @@ import Garage from './features/Garage/Garage';
 import AiChat from './features/AiChat/AiChat';
 import TabButton from './components/TabButton';
 import Notification from './components/Notification';
+import Logo from './components/Logo';
 
 // Declare jspdf from window for global access
 declare global {
@@ -37,7 +36,8 @@ const AppContent: React.FC = () => {
         <div className="bg-gray-900 text-white min-h-screen font-sans">
             <Notification />
             <header className="bg-gray-800 shadow-md sticky top-0 z-10">
-                <div className="container mx-auto px-4 py-4 flex justify-center items-center">
+                <div className="container mx-auto px-4 py-4 flex justify-center items-center gap-4">
+                    <Logo className="w-10 h-10 md:w-12 md:h-12 drop-shadow-md" />
                     <h1 className="text-3xl font-bold tracking-tight text-white">MotoMentor AI</h1>
                 </div>
             </header>
@@ -77,8 +77,6 @@ const AppContent: React.FC = () => {
                     </p>
                 </div>
             </footer>
-            <Analytics />
-            <SpeedInsights />
         </div>
     );
 };
