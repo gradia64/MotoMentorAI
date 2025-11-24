@@ -16,7 +16,15 @@ import Tooltip from '../../components/Tooltip';
 // --- CONSTANTS ---
 // Moved outside the component to prevent re-creation on every render.
 const TOURS = [
-    "Tour della Scozia", "Avventura in Marocco", "Giro della Penisola Iberica", "Esplorazione della Turchia", "Le strade alpine della Svizzera", "Coste e fiordi della Norvegia", "La Route des Grandes Alpes e le Gole del Verdon", "Auschwitz Il viaggio della memoria"
+    "Tour della Scozia", 
+    "Avventura in Marocco", 
+    "Giro della Penisola Iberica", 
+    "Esplorazione della Turchia", 
+    "Le strade alpine della Svizzera", 
+    "Coste e fiordi della Norvegia", 
+    "La Route des Grandes Alpes e le Gole del Verdon", 
+    "Auschwitz Il viaggio della memoria",
+    "Tour in Normandia"
 ];
 
 const ROAD_PREFERENCES = [

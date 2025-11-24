@@ -1,4 +1,4 @@
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 // Fix: Use standard module import path without extension.
 import App from './App';
@@ -13,16 +13,16 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
-// Fix: Explicitly extending React.Component can resolve certain TypeScript or linter
+// Fix: Explicitly extending Component can resolve certain TypeScript or linter
 // configuration issues where the props from the base class are not correctly inferred.
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Fix: Initialize state as a class property. This modern syntax is cleaner and avoids
-  // potential issues with TypeScript's type inference for `this.state` and `this.props`
-  // within class components, which was causing the errors.
-  state: ErrorBoundaryState = {
-    hasError: false,
-    error: undefined,
-  };
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: undefined,
+    };
+  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     // Update state so the next render will show the fallback UI.
