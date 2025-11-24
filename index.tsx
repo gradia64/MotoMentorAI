@@ -1,7 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
-import { SpeedInsights } from '@vercel/speed-insights/react';
-// Fix: Use standard module import path without extension.
 import App from './App';
 
 // --- Error Boundary Component ---
@@ -16,7 +14,7 @@ interface ErrorBoundaryState {
 
 // Fix: Explicitly extending Component can resolve certain TypeScript or linter
 // configuration issues where the props from the base class are not correctly inferred.
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {
@@ -74,7 +72,6 @@ root.render(
   <React.StrictMode>
     <ErrorBoundary>
       <App />
-      <SpeedInsights />
     </ErrorBoundary>
   </React.StrictMode>
 );
