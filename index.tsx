@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 // Fix: Use standard module import path without extension.
 import App from './App';
 
@@ -73,6 +74,7 @@ root.render(
   <React.StrictMode>
     <ErrorBoundary>
       <App />
+      <SpeedInsights />
     </ErrorBoundary>
   </React.StrictMode>
 );
