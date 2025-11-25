@@ -290,6 +290,7 @@ const TripPlanner: React.FC = () => {
                     <>
                         <InputField id="departure" label="Il tuo Luogo di Partenza" value={departure} onChange={(e) => setDraftValue('departure', e.target.value)} placeholder="Es. Milano" required />
                         <SelectField id="tour" label="Scegli un Tour" value={selectedTour} onChange={(e) => setDraftValue('selectedTour', e.target.value)}>
+                            <option value="" disabled>Es. Tour della Scozia</option>
                             {TOURS.map(tour => <option key={tour} value={tour}>{tour}</option>)}
                         </SelectField>
                     </>
@@ -298,6 +299,7 @@ const TripPlanner: React.FC = () => {
                 <InputField id="period" label="Periodo del Viaggio" value={period} onChange={(e) => setDraftValue('period', e.target.value)} placeholder="Es. Metà Luglio" required />
                 <div className="md:col-span-2">
                     <SelectField id="roadPreference" label="Tipo di Strade Preferite" value={roadPreference} onChange={(e) => setDraftValue('roadPreference', e.target.value)}>
+                        <option value="" disabled>Es. Strade panoramiche e tortuose</option>
                         {ROAD_PREFERENCES.map(pref => <option key={pref} value={pref}>{pref}</option>)}
                     </SelectField>
                 </div>
