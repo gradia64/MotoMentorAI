@@ -126,12 +126,12 @@ const initialState: AppState = {
     drafts: {
         tripPlanner: {
             tripType: 'itinerary',
-            selectedTour: 'Tour della Scozia',
+            selectedTour: '',
             departure: '',
             destination: '',
             duration: '',
             period: '',
-            roadPreference: 'Strade panoramiche e tortuose',
+            roadPreference: '',
             customRoadPreferenceText: '',
             customPrompt: '',
         },
@@ -304,21 +304,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         dispatch({ type: 'SET_ERROR', payload: null });
 
         const { tripPlanner } = state.drafts;
-        const { tripType, departure, destination, duration, period } = tripPlanner;
+        const { tripType, departure, destination, duration, period, selectedTour, roadPreference } = tripPlanner;
 
         // --- 1. VALIDATION FIRST ---
         try {
             if (tripType === 'itinerary' && (!departure?.trim() || !destination?.trim())) {
                 throw new Error("Partenza e destinazione sono obbligatorie per un itinerario.");
             }
-            if (tripType === 'tour' && !departure?.trim()) {
-                throw new Error("Il luogo di partenza è obbligatorio per un tour.");
+            if (tripType === 'tour') {
+                if (!departure?.trim()) {
+                    throw new Error("Il luogo di partenza è obbligatorio per un tour.");
+                }
+                if (!selectedTour?.trim()) {
+                    throw new Error("Seleziona un tour dall'elenco.");
+                }
             }
+            
             if (!duration || isNaN(parseInt(duration)) || parseInt(duration) <= 0) {
                 throw new Error("La durata deve essere un numero di giorni valido.");
             }
             if (!period.trim()) {
                 throw new Error("Il 'Periodo del Viaggio' è un campo obbligatorio.");
+            }
+            if (!roadPreference?.trim()) {
+                throw new Error("Seleziona una preferenza per il tipo di strade.");
             }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Dati del modulo non validi.';
@@ -835,7 +844,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             for await (const chunk of stream) {
                 modelResponseText += chunk.text;
                 if (firstChunk) {
-                    dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: [...updatedHistoryWithUser, { role: 'model', parts: [{ text: modelResponseText }] }] } });
+                    dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: [...updatedHistoryWithUser, { role: 'model', parts: [{ text: modelResponseText }] }] }] });
                     firstChunk = false;
                 } else {
                     const currentHistory = [...updatedHistoryWithUser, { role: 'model', parts: [{ text: modelResponseText }] }];

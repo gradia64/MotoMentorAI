@@ -1,10 +1,11 @@
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
 // --- Error Boundary Component ---
 interface ErrorBoundaryProps {
-  children: ReactNode;
+  // Made optional to satisfy strict attribute checks on usage <ErrorBoundary>...</ErrorBoundary>
+  children?: ReactNode;
 }
 
 interface ErrorBoundaryState {
@@ -14,14 +15,12 @@ interface ErrorBoundaryState {
 
 // Fix: Explicitly extending Component can resolve certain TypeScript or linter
 // configuration issues where the props from the base class are not correctly inferred.
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: undefined,
-    };
-  }
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Explicitly declare state to avoid "Property 'state' does not exist" error
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: undefined,
+  };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     // Update state so the next render will show the fallback UI.
@@ -75,3 +74,16 @@ root.render(
     </ErrorBoundary>
   </React.StrictMode>
 );
+
+// --- PWA Service Worker Registration ---
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then((registration) => {
+        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+      })
+      .catch((error) => {
+        console.log('ServiceWorker registration failed: ', error);
+      });
+  });
+}
