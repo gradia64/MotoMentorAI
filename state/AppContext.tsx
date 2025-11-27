@@ -844,7 +844,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             for await (const chunk of stream) {
                 modelResponseText += chunk.text;
                 if (firstChunk) {
-                    dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: [...updatedHistoryWithUser, { role: 'model', parts: [{ text: modelResponseText }] }] }] });
+                    dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: [...updatedHistoryWithUser, { role: 'model', parts: [{ text: modelResponseText }] }] } });
                     firstChunk = false;
                 } else {
                     const currentHistory = [...updatedHistoryWithUser, { role: 'model', parts: [{ text: modelResponseText }] }];

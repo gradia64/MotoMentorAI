@@ -16,11 +16,13 @@ interface ErrorBoundaryState {
 // Fix: Explicitly extending Component can resolve certain TypeScript or linter
 // configuration issues where the props from the base class are not correctly inferred.
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Explicitly declare state to avoid "Property 'state' does not exist" error
-  public state: ErrorBoundaryState = {
-    hasError: false,
-    error: undefined,
-  };
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: undefined,
+    };
+  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     // Update state so the next render will show the fallback UI.
