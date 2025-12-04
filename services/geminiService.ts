@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Part, Chat } from "@google/genai";
-import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, MaintenanceRecord } from '../types';
+import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, MaintenanceRecord, VEHICLE_SPECS_SCHEMA } from '../types';
 
 // --- SECURITY WARNING & PROXY ARCHITECTURE ---
 // In a production app, the API key must NEVER be exposed in the frontend.
@@ -97,6 +98,15 @@ const mapApiMaintenanceTipsToApp = (apiResponse: any): MaintenanceTips => {
         tripSpecificTips: apiResponse.suggerimenti_specifici_viaggio,
         emergencyEquipment: apiResponse.equipaggiamento_emergenza,
     };
+};
+
+const mapApiSpecsToApp = (apiResponse: any) => {
+     return {
+        displacement: apiResponse.cilindrata,
+        power: apiResponse.potenza,
+        frontTire: apiResponse.pneumatico_anteriore,
+        rearTire: apiResponse.pneumatico_posteriore,
+     };
 };
 
 
@@ -256,6 +266,17 @@ export const getMaintenanceTips = async (
     };
     const apiResponse = await apiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] }, config);
     return mapApiMaintenanceTipsToApp(apiResponse);
+};
+
+export const getVehicleSpecs = async (model: string, year: string) => {
+    const prompt = `Fornisci i dati tecnici standard per questa moto: ${model} del ${year}.
+    Restituisci cilindrata, potenza (specifica se CV o kW), misura pneumatico anteriore e posteriore standard.`;
+    const config = {
+        responseMimeType: "application/json",
+        responseSchema: VEHICLE_SPECS_SCHEMA,
+    };
+    const apiResponse = await apiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] }, config);
+    return mapApiSpecsToApp(apiResponse);
 };
 
 export const createChatSession = (vehicle: GarageVehicle | null): Chat => {

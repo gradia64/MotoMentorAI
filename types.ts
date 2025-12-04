@@ -1,3 +1,4 @@
+
 import { Type } from '@google/genai';
 
 export enum AiMode {
@@ -74,6 +75,15 @@ export interface GarageVehicle {
     purchaseDate?: string;
     vin?: string;
     photo?: string; // base64 encoded image string
+    // Digital Garage Extensions
+    displacement?: string; // cc
+    power?: string; // HP or kW
+    frontTire?: string;
+    rearTire?: string;
+    insuranceExpiry?: string; // ISO Date
+    taxExpiry?: string; // Bollo - ISO Date
+    inspectionExpiry?: string; // Revisione - ISO Date
+    notes?: string;
 }
 
 export interface SavedTrip {
@@ -100,6 +110,7 @@ export interface SavedDiagnosis {
     diagnosisText: string;
 }
 
+// --- SCHEMAS ---
 
 export const ITINERARY_SCHEMA = {
     type: Type.OBJECT,
@@ -179,4 +190,15 @@ export const MAINTENANCE_TIPS_SCHEMA = {
         }
     },
     required: ["controlli_essenziali", "suggerimenti_specifici_viaggio", "equipaggiamento_emergenza"]
+};
+
+export const VEHICLE_SPECS_SCHEMA = {
+    type: Type.OBJECT,
+    properties: {
+        cilindrata: { type: Type.STRING, description: "Cilindrata esatta del motore (es. 1254 cc)." },
+        potenza: { type: Type.STRING, description: "Potenza massima del motore (es. 136 CV)." },
+        pneumatico_anteriore: { type: Type.STRING, description: "Misura pneumatico anteriore standard (es. 120/70 R19)." },
+        pneumatico_posteriore: { type: Type.STRING, description: "Misura pneumatico posteriore standard (es. 170/60 R17)." }
+    },
+    required: ["cilindrata", "potenza", "pneumatico_anteriore", "pneumatico_posteriore"]
 };

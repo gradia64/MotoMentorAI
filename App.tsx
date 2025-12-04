@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, ClockIcon } from '@heroicons/react/24/outline';
 
 import { AiMode } from './types';
 import { AppProvider, useAppContext } from './state/AppContext';
@@ -43,6 +44,39 @@ const AppContent: React.FC = () => {
             </header>
 
             <main className="container mx-auto p-4 md:p-6">
+                {/* GLOBAL ALERTS SECTION */}
+                {state.deadlineAlerts.length > 0 && (
+                     <div className="mb-6 space-y-2 animate-fade-in-up">
+                        {state.deadlineAlerts.map((alert, index) => (
+                            <div 
+                                key={`${alert.vehicleId}-${alert.type}`} 
+                                className={`p-3 rounded-lg flex items-center gap-3 border ${
+                                    alert.status === 'expired' 
+                                        ? 'bg-red-900/50 border-red-700 text-red-200' 
+                                        : 'bg-orange-900/50 border-orange-700 text-orange-200'
+                                }`}
+                            >
+                                {alert.status === 'expired' ? <ExclamationTriangleIcon className="w-6 h-6 flex-shrink-0" /> : <ClockIcon className="w-6 h-6 flex-shrink-0" />}
+                                <div className="flex-grow">
+                                    <p className="font-bold text-sm">
+                                        {alert.status === 'expired' ? 'SCADUTO: ' : 'IN SCADENZA: '}
+                                        {alert.vehicleName} - {alert.type}
+                                    </p>
+                                    <p className="text-xs opacity-90">
+                                        Data: {new Date(alert.date).toLocaleDateString('it-IT')} 
+                                        {alert.daysRemaining < 0 
+                                            ? ` (Scaduto da ${Math.abs(alert.daysRemaining)} giorni)` 
+                                            : ` (Mancano ${alert.daysRemaining} giorni)`}
+                                    </p>
+                                </div>
+                                <button onClick={() => setMode(AiMode.Garage)} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded transition-colors whitespace-nowrap">
+                                    Gestisci
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
                     <div className="flex border-b border-gray-700">
                         <TabButton text="Planner Viaggi" icon={<MapPinIcon className="w-5 h-5"/>} active={state.mode === AiMode.TripPlanner} onClick={() => setMode(AiMode.TripPlanner)} />
