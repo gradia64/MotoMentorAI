@@ -10,7 +10,7 @@ import { generatePdf } from '../utils/pdf';
 
 interface Notification {
     message: string;
-    type: 'success' | 'error';
+    type: 'success' | 'error' | 'warning';
 }
 
 export interface ChatHistoryItem {
@@ -42,6 +42,7 @@ interface AppState {
     error: string | null;
     notification: Notification | null;
     savedConfirmation: string | null;
+    usingLocalStorage: boolean; // Flag to indicate if we are in offline/local mode
 
     // Data
     garageVehicles: GarageVehicle[];
@@ -106,7 +107,8 @@ type AppAction =
     | { type: 'UPDATE_TRIP_DRAFT'; payload: Partial<AppState['drafts']['tripPlanner']> }
     | { type: 'UPDATE_MECHANIC_DRAFT'; payload: Partial<AppState['drafts']['virtualMechanic']> }
     | { type: 'SET_MECHANIC_MODE'; payload: 'diagnose' | 'maintenance' | 'workshop' }
-    | { type: 'RESET_TRIP_PLANNER_FORM' };
+    | { type: 'RESET_TRIP_PLANNER_FORM' }
+    | { type: 'SET_USING_LOCAL_STORAGE'; payload: boolean };
 
 
 // --- INITIAL STATE ---
@@ -123,6 +125,7 @@ const initialState: AppState = {
     error: null,
     notification: null,
     savedConfirmation: null,
+    usingLocalStorage: false, 
     garageVehicles: [],
     activeVehicle: null,
     maintenanceLog: [],
@@ -189,6 +192,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                 tripPlanner: initialState.drafts.tripPlanner,
             }
         };
+        case 'SET_USING_LOCAL_STORAGE': return { ...state, usingLocalStorage: action.payload };
         default: return state;
     }
 };
@@ -229,6 +233,28 @@ const calculateDeadlineAlerts = (vehicles: GarageVehicle[]): DeadlineAlert[] => 
     });
 
     return alerts.sort((a, b) => a.daysRemaining - b.daysRemaining);
+};
+
+// --- LOCAL STORAGE HELPERS ---
+const KEYS = {
+    GARAGE: 'motoMentorGarage',
+    MAINTENANCE: 'motoMentorMaintenance',
+    REMINDERS: 'motoMentorReminders',
+    TRIPS: 'motoMentorTrips',
+    DIAGNOSES: 'motoMentorDiagnoses'
+};
+
+const saveToLocal = (key: string, data: any) => {
+    try {
+        localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) { console.error("LS Save Error", e); }
+};
+
+const getFromLocal = (key: string, defaultVal: any = []) => {
+    try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultVal;
+    } catch (e) { return defaultVal; }
 };
 
 
@@ -287,15 +313,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return () => clearTimeout(handler);
     }, [state.drafts, setStoredDrafts, storedDrafts]);
     
-    const showNotification = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    const showNotification = useCallback((message: string, type: 'success' | 'error' | 'warning' = 'success') => {
         dispatch({ type: 'SET_NOTIFICATION', payload: { message, type } });
     }, []);
 
 
-    // --- LOAD DATA FROM CLOUD (NEON) ---
+    // --- LOAD DATA (Hybrid Cloud/Local) ---
     const fetchData = useCallback(async () => {
         dispatch({ type: 'SET_LOADING_DATA', payload: true });
         try {
+            // Attempt to fetch from API first
             const [vehiclesRes, logsRes, remindersRes, tripsRes, diagnosesRes] = await Promise.all([
                 fetch('/api/garage'),
                 fetch('/api/maintenance'),
@@ -304,8 +331,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 fetch('/api/diagnoses')
             ]);
 
-            // If API not available (e.g. static host without backend), fallback or error handled below.
-            if (!vehiclesRes.ok) throw new Error("Errore connessione Database.");
+            // If API not available (returns HTML/404), throw to trigger fallback
+            if (!vehiclesRes.ok || !vehiclesRes.headers.get('content-type')?.includes('application/json')) {
+                 throw new Error("API not available");
+            }
 
             const vehicles: GarageVehicle[] = await vehiclesRes.json();
             const logs: MaintenanceRecord[] = await logsRes.json();
@@ -318,32 +347,71 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: reminders } });
             dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: trips } });
             dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: diagnoses } });
-
-            // Post-load calculations
-            const alerts = calculateDeadlineAlerts(vehicles);
-            dispatch({ type: 'SET_DATA', payload: { key: 'deadlineAlerts', value: alerts } });
-
-            const active = vehicles.find(v => v.id === storedActiveId);
-            dispatch({ type: 'SET_DATA', payload: { key: 'activeVehicle', value: active || null } });
-            
-            // Restore drafts
-            dispatch({ type: 'UPDATE_TRIP_DRAFT', payload: storedDrafts.tripPlanner });
-            dispatch({ type: 'UPDATE_MECHANIC_DRAFT', payload: { problemDescription: storedDrafts.virtualMechanic.problemDescription } });
+            dispatch({ type: 'SET_USING_LOCAL_STORAGE', payload: false });
 
         } catch (error) {
-            console.warn("Impossibile caricare i dati dal cloud (le API potrebbero non essere attive):", error);
-            // Optionally could use localStorage fallback here if we wanted hybrid mode
+            console.warn("API Cloud non disponibile. Passaggio alla modalità locale (LocalStorage).", error);
+            // FALLBACK TO LOCAL STORAGE
+            dispatch({ type: 'SET_USING_LOCAL_STORAGE', payload: true });
+            
+            const vehicles = getFromLocal(KEYS.GARAGE);
+            const logs = getFromLocal(KEYS.MAINTENANCE);
+            const reminders = getFromLocal(KEYS.REMINDERS);
+            const trips = getFromLocal(KEYS.TRIPS);
+            const diagnoses = getFromLocal(KEYS.DIAGNOSES);
+
+            dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: vehicles } });
+            dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: logs } });
+            dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: reminders } });
+            dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: trips } });
+            dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: diagnoses } });
+
+            showNotification("Modalità Offline: Dati caricati dal dispositivo.", "success");
         } finally {
+            // Post-load calculations (always run)
+            // We need to use state updater or access 'values' from above, but since dispatch is async relative to render,
+            // we rely on the fact that we dispatched SET_DATA. 
+            // Better: Recalculate based on what we just loaded.
+            
+            // Re-read directly from source to ensure sync calculation
+            const isLocal = state.usingLocalStorage; // This might be stale, check logic flow
+            // Actually, we can just trigger a second effect or just assume the next render handles it?
+            // Let's do it manually with the data we have in scope.
+            // But variables are inside try/catch blocks.
+            // Simplified: The useEffect below or the reducer will handle simple updates, but activeVehicle needs to be set.
+            
+            // To be safe, we let the component re-render. 
+            // BUT activeVehicle needs to be set immediately after data load to prevent UI flicker.
+            // Since we can't easily access the loaded data here across the try/catch boundary cleanly without duplication:
+            // We defer 'activeVehicle' setting to a useEffect dependency on garageVehicles.
+            
             dispatch({ type: 'SET_LOADING_DATA', payload: false });
         }
-    }, [storedActiveId, storedDrafts]);
+    }, [storedActiveId]);
 
     useEffect(() => {
         fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // Run once on mount
+    }, []); 
 
-    // Refresh chat list (Local Storage based)
+    // Effect to set active vehicle and alerts once vehicles are loaded
+    useEffect(() => {
+        if (state.garageVehicles.length > 0) {
+            const active = state.garageVehicles.find(v => v.id === storedActiveId);
+            dispatch({ type: 'SET_DATA', payload: { key: 'activeVehicle', value: active || null } });
+            const alerts = calculateDeadlineAlerts(state.garageVehicles);
+            dispatch({ type: 'SET_DATA', payload: { key: 'deadlineAlerts', value: alerts } });
+        } else {
+             dispatch({ type: 'SET_DATA', payload: { key: 'activeVehicle', value: null } });
+        }
+        
+        // Restore drafts
+        dispatch({ type: 'UPDATE_TRIP_DRAFT', payload: storedDrafts.tripPlanner });
+        dispatch({ type: 'UPDATE_MECHANIC_DRAFT', payload: { problemDescription: storedDrafts.virtualMechanic.problemDescription } });
+
+    }, [state.garageVehicles, storedActiveId, storedDrafts]); // Dependency on loaded vehicles
+
+    // ... Chat Refresh Logic ...
     const refreshChatHistoryList = useCallback(() => {
         const keys = Object.keys(localStorage).filter(key => key.startsWith('motoMentorChatHistory_'));
         const items: ChatHistoryItem[] = keys.map(key => {
@@ -362,70 +430,89 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         dispatch({ type: 'SET_DATA', payload: { key: 'chatHistoryList', value: items } });
     }, [state.garageVehicles]);
     
-    // Refresh chat list when vehicles change
-    useEffect(() => {
-        refreshChatHistoryList();
-    }, [state.garageVehicles, refreshChatHistoryList]);
+    useEffect(() => { refreshChatHistoryList(); }, [state.garageVehicles, refreshChatHistoryList]);
 
     
-    // --- BUSINESS LOGIC (HANDLERS - Cloud Aware) ---
+    // --- CRUD HANDLERS (HYBRID) ---
     
     const handleAddVehicle = useCallback(async (newVehicleData: Omit<GarageVehicle, 'id'>) => {
         const newVehicle: GarageVehicle = { ...newVehicleData, id: Date.now().toString() };
+        
+        // Optimistic / Hybrid Update
+        const updatedVehicles = [...state.garageVehicles, newVehicle];
+        
         try {
-            await fetch('/api/garage', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newVehicle)
-            });
-            // Update local state immediately for UI responsiveness
-            const updatedVehicles = [...state.garageVehicles, newVehicle];
+            if (!state.usingLocalStorage) {
+                await fetch('/api/garage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newVehicle)
+                });
+            } else {
+                saveToLocal(KEYS.GARAGE, updatedVehicles);
+            }
+            
             dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: updatedVehicles } });
-            const alerts = calculateDeadlineAlerts(updatedVehicles);
-            dispatch({ type: 'SET_DATA', payload: { key: 'deadlineAlerts', value: alerts } });
             if (updatedVehicles.length === 1) handleSetActiveVehicle(newVehicle.id, updatedVehicles);
-            showNotification("Veicolo salvato nel cloud!");
+            showNotification(state.usingLocalStorage ? "Veicolo salvato in locale." : "Veicolo salvato nel cloud!");
         } catch (e) {
-            showNotification("Errore nel salvataggio del veicolo.", "error");
+            // Fallback to local if cloud fails unexpectedly
+             console.warn("Cloud save failed, falling back to local", e);
+             saveToLocal(KEYS.GARAGE, updatedVehicles);
+             dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: updatedVehicles } });
+             dispatch({ type: 'SET_USING_LOCAL_STORAGE', payload: true });
+             showNotification("Errore Cloud. Veicolo salvato in locale.", "warning");
         }
-    }, [state.garageVehicles, showNotification]);
+    }, [state.garageVehicles, state.usingLocalStorage, showNotification]);
 
     const handleUpdateVehicle = useCallback(async (updatedVehicle: GarageVehicle) => {
+        const updatedVehicles = state.garageVehicles.map(v => v.id === updatedVehicle.id ? updatedVehicle : v);
+        
         try {
-            await fetch('/api/garage', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedVehicle)
-            });
-            const updatedVehicles = state.garageVehicles.map(v => v.id === updatedVehicle.id ? updatedVehicle : v);
+             if (!state.usingLocalStorage) {
+                await fetch('/api/garage', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updatedVehicle)
+                });
+            } else {
+                saveToLocal(KEYS.GARAGE, updatedVehicles);
+            }
+
             dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: updatedVehicles } });
-            const alerts = calculateDeadlineAlerts(updatedVehicles);
-            dispatch({ type: 'SET_DATA', payload: { key: 'deadlineAlerts', value: alerts } });
             if (state.activeVehicle?.id === updatedVehicle.id) {
                 dispatch({ type: 'SET_DATA', payload: { key: 'activeVehicle', value: updatedVehicle } });
             }
             showNotification("Veicolo aggiornato!");
         } catch (e) {
-            showNotification("Errore aggiornamento veicolo.", "error");
+            saveToLocal(KEYS.GARAGE, updatedVehicles);
+            dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: updatedVehicles } });
+            showNotification("Errore Cloud. Aggiornato in locale.", "warning");
         }
-    }, [state.garageVehicles, state.activeVehicle?.id, showNotification]);
+    }, [state.garageVehicles, state.activeVehicle?.id, state.usingLocalStorage, showNotification]);
 
     const handleDeleteVehicle = useCallback(async (id: string) => {
+        const updatedVehicles = state.garageVehicles.filter(v => v.id !== id);
+        
         try {
-            await fetch(`/api/garage?id=${id}`, { method: 'DELETE' });
-            const updatedVehicles = state.garageVehicles.filter(v => v.id !== id);
+             if (!state.usingLocalStorage) {
+                await fetch(`/api/garage?id=${id}`, { method: 'DELETE' });
+             } else {
+                saveToLocal(KEYS.GARAGE, updatedVehicles);
+             }
+             
             dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: updatedVehicles } });
-            const alerts = calculateDeadlineAlerts(updatedVehicles);
-            dispatch({ type: 'SET_DATA', payload: { key: 'deadlineAlerts', value: alerts } });
             if (state.activeVehicle?.id === id) {
                 setStoredActiveId(null);
                 dispatch({ type: 'SET_DATA', payload: { key: 'activeVehicle', value: null } });
             }
-            showNotification("Veicolo rimosso.", "success");
+            showNotification("Veicolo rimosso.");
         } catch (e) {
-            showNotification("Errore eliminazione veicolo.", "error");
+            saveToLocal(KEYS.GARAGE, updatedVehicles);
+            dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: updatedVehicles } });
+            showNotification("Rimosso in locale (Errore Cloud).", "warning");
         }
-    }, [state.garageVehicles, state.activeVehicle?.id, setStoredActiveId, showNotification]);
+    }, [state.garageVehicles, state.activeVehicle?.id, state.usingLocalStorage, setStoredActiveId, showNotification]);
 
     const handleSetActiveVehicle = useCallback((id: string, currentVehicles = state.garageVehicles) => {
         const vehicleToSet = currentVehicles.find(v => v.id === id);
@@ -435,14 +522,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [state.garageVehicles, setStoredActiveId]);
 
-    // ... (Trip Logic remains mostly same, just calling API for history)
+    // --- TRIPS ---
     const handleTripSubmit = useCallback(async (e: FormEvent) => {
-        // [Existing validation logic] ...
         e.preventDefault();
         dispatch({ type: 'SET_ERROR', payload: null });
         const { tripPlanner } = state.drafts;
         
-        // Validation... (Simplified for brevity of diff, assume same validation logic)
          if (!tripPlanner.duration || isNaN(parseInt(tripPlanner.duration))) {
             showNotification("Durata non valida", 'error'); return;
         }
@@ -487,26 +572,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } else {
              newTrip = { id: Date.now().toString(), inputs: currentInputs, itinerary: state.itinerary };
         }
+        
+        let updatedHistory;
+        if (method === 'PUT') {
+             updatedHistory = state.tripHistory.map(t => t.id === newTrip.id ? newTrip : t);
+        } else {
+             updatedHistory = [newTrip, ...state.tripHistory];
+        }
 
         try {
-            await fetch('/api/trips', {
-                method: method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newTrip)
-            });
-            
-            let updatedHistory;
-            if (method === 'PUT') {
-                 updatedHistory = state.tripHistory.map(t => t.id === newTrip.id ? newTrip : t);
-            } else {
-                 updatedHistory = [newTrip, ...state.tripHistory];
-                 dispatch({ type: 'SET_ITINERARY', payload: { itinerary: state.itinerary, tripId: newTrip.id }});
-            }
+             if (!state.usingLocalStorage) {
+                await fetch('/api/trips', {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newTrip)
+                });
+             } else {
+                saveToLocal(KEYS.TRIPS, updatedHistory);
+             }
+
             dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: updatedHistory } });
-            dispatch({ type: 'SET_DATA', payload: { key: 'savedConfirmation', value: "Itinerario salvato nel cloud!" } });
+            if(method === 'POST') dispatch({ type: 'SET_ITINERARY', payload: { itinerary: state.itinerary, tripId: newTrip.id }});
+            
+            dispatch({ type: 'SET_DATA', payload: { key: 'savedConfirmation', value: state.usingLocalStorage ? "Salvato in locale." : "Salvato nel cloud!" } });
             setTimeout(() => dispatch({ type: 'SET_DATA', payload: { key: 'savedConfirmation', value: null } }), 3000);
-        } catch(e) { showNotification("Errore salvataggio viaggio", "error"); }
-    }, [state.itinerary, state.activeTripId, state.tripHistory, state.drafts.tripPlanner, showNotification]);
+        } catch(e) { 
+             saveToLocal(KEYS.TRIPS, updatedHistory);
+             dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: updatedHistory } });
+             showNotification("Salvato in locale (Errore Cloud).", "warning"); 
+        }
+    }, [state.itinerary, state.activeTripId, state.tripHistory, state.drafts.tripPlanner, state.usingLocalStorage, showNotification]);
 
     const handleSaveAndReset = useCallback(() => {
         saveItinerary();
@@ -527,25 +622,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, [state.tripHistory, loadTripFromHistory]);
 
     const deleteTripFromHistory = useCallback(async (tripId: string) => {
+        const updatedHistory = state.tripHistory.filter(trip => trip.id !== tripId);
         try {
-            await fetch(`/api/trips?id=${tripId}`, { method: 'DELETE' });
+            if (!state.usingLocalStorage) {
+                await fetch(`/api/trips?id=${tripId}`, { method: 'DELETE' });
+            } else {
+                saveToLocal(KEYS.TRIPS, updatedHistory);
+            }
             if (state.activeTripId === tripId) dispatch({ type: 'RESET_TRIP_PLANNER_FORM' });
-            const updatedHistory = state.tripHistory.filter(trip => trip.id !== tripId);
             dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: updatedHistory }});
-            showNotification("Viaggio eliminato.", "success");
-        } catch(e) { showNotification("Errore eliminazione.", "error"); }
-    }, [state.activeTripId, state.tripHistory, showNotification]);
+            showNotification("Viaggio eliminato.");
+        } catch(e) { 
+            saveToLocal(KEYS.TRIPS, updatedHistory);
+            dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: updatedHistory }});
+            showNotification("Eliminato in locale (Errore Cloud).", "warning"); 
+        }
+    }, [state.activeTripId, state.tripHistory, state.usingLocalStorage, showNotification]);
     
     // --- MAINTENANCE HANDLERS ---
     const handleAddMaintenanceRecord = useCallback(async (newRecordData: Omit<MaintenanceRecord, 'id'>) => {
         const newRecord = { ...newRecordData, id: Date.now().toString() };
+        const updatedLog = [newRecord, ...state.maintenanceLog].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
         try {
-            await fetch('/api/maintenance', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newRecord)
-            });
-            const updatedLog = [newRecord, ...state.maintenanceLog].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            if (!state.usingLocalStorage) {
+                await fetch('/api/maintenance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newRecord)
+                });
+            } else {
+                saveToLocal(KEYS.MAINTENANCE, updatedLog);
+            }
+            
             dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: updatedLog }});
             
             // Check mileage update
@@ -556,38 +665,66 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             } else {
                 showNotification("Intervento salvato!");
             }
-        } catch(e) { showNotification("Errore salvataggio log.", "error"); }
-    }, [state.maintenanceLog, state.activeVehicle, handleUpdateVehicle, showNotification]);
+        } catch(e) { 
+            saveToLocal(KEYS.MAINTENANCE, updatedLog);
+            dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: updatedLog }});
+            showNotification("Salvato in locale (Errore Cloud).", "warning"); 
+        }
+    }, [state.maintenanceLog, state.activeVehicle, state.usingLocalStorage, handleUpdateVehicle, showNotification]);
 
     const handleDeleteMaintenanceRecord = useCallback(async (id: string) => {
         if(!window.confirm("Eliminare questa registrazione?")) return;
+        const updatedLog = state.maintenanceLog.filter(r => r.id !== id);
         try {
-            await fetch(`/api/maintenance?id=${id}`, { method: 'DELETE' });
-            const updatedLog = state.maintenanceLog.filter(r => r.id !== id);
+            if (!state.usingLocalStorage) {
+                await fetch(`/api/maintenance?id=${id}`, { method: 'DELETE' });
+            } else {
+                saveToLocal(KEYS.MAINTENANCE, updatedLog);
+            }
             dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: updatedLog } });
-        } catch(e) { showNotification("Errore eliminazione log.", "error"); }
-    }, [state.maintenanceLog, showNotification]);
+        } catch(e) { 
+             saveToLocal(KEYS.MAINTENANCE, updatedLog);
+             dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: updatedLog } });
+             showNotification("Eliminato in locale (Errore Cloud).", "warning");
+        }
+    }, [state.maintenanceLog, state.usingLocalStorage, showNotification]);
 
     const handleAddReminder = useCallback(async (newReminderData: Omit<MaintenanceReminder, 'id'>) => {
         const newReminder = { ...newReminderData, id: Date.now().toString() };
+        const updatedReminders = [...state.reminders, newReminder];
         try {
-            await fetch('/api/reminders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newReminder)
-            });
-            const updatedReminders = [...state.reminders, newReminder];
+            if (!state.usingLocalStorage) {
+                await fetch('/api/reminders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newReminder)
+                });
+            } else {
+                saveToLocal(KEYS.REMINDERS, updatedReminders);
+            }
             dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: updatedReminders } });
-        } catch(e) { showNotification("Errore salvataggio promemoria.", "error"); }
-    }, [state.reminders, showNotification]);
+        } catch(e) { 
+             saveToLocal(KEYS.REMINDERS, updatedReminders);
+             dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: updatedReminders } });
+             showNotification("Salvato in locale (Errore Cloud).", "warning");
+        }
+    }, [state.reminders, state.usingLocalStorage, showNotification]);
 
     const handleDeleteReminder = useCallback(async (id: string) => {
+        const updatedReminders = state.reminders.filter(r => r.id !== id);
         try {
-            await fetch(`/api/reminders?id=${id}`, { method: 'DELETE' });
-            const updatedReminders = state.reminders.filter(r => r.id !== id);
+            if (!state.usingLocalStorage) {
+                 await fetch(`/api/reminders?id=${id}`, { method: 'DELETE' });
+            } else {
+                 saveToLocal(KEYS.REMINDERS, updatedReminders);
+            }
             dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: updatedReminders } });
-        } catch(e) { showNotification("Errore eliminazione promemoria.", "error"); }
-    }, [state.reminders, showNotification]);
+        } catch(e) { 
+            saveToLocal(KEYS.REMINDERS, updatedReminders);
+            dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: updatedReminders } });
+            showNotification("Eliminato in locale (Errore Cloud).", "warning");
+        }
+    }, [state.reminders, state.usingLocalStorage, showNotification]);
 
     // --- DIAGNOSIS HANDLERS ---
     const handleSaveOrUpdateDiagnosis = useCallback(async () => {
@@ -615,26 +752,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 diagnosisText: state.diagnosis
             };
         }
+        
+        let updatedDiagnoses;
+        if (method === 'PUT') {
+             updatedDiagnoses = state.savedDiagnoses.map(d => d.id === newDiagnosis.id ? newDiagnosis : d);
+        } else {
+             updatedDiagnoses = [newDiagnosis, ...state.savedDiagnoses];
+        }
 
         try {
-            await fetch('/api/diagnoses', {
-                method: method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newDiagnosis)
-            });
-            
-            let updatedDiagnoses;
-            if (method === 'PUT') {
-                 updatedDiagnoses = state.savedDiagnoses.map(d => d.id === newDiagnosis.id ? newDiagnosis : d);
-            } else {
-                 updatedDiagnoses = [newDiagnosis, ...state.savedDiagnoses];
-                 dispatch({ type: 'SET_DIAGNOSIS', payload: { diagnosis: state.diagnosis, diagnosisId: newDiagnosis.id } });
-            }
+             if (!state.usingLocalStorage) {
+                await fetch('/api/diagnoses', {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newDiagnosis)
+                });
+             } else {
+                saveToLocal(KEYS.DIAGNOSES, updatedDiagnoses);
+             }
+
             dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: updatedDiagnoses } });
+            if (method === 'POST') dispatch({ type: 'SET_DIAGNOSIS', payload: { diagnosis: state.diagnosis, diagnosisId: newDiagnosis.id } });
+            
             dispatch({ type: 'SET_DATA', payload: { key: 'savedConfirmation', value: "Diagnosi salvata!" } });
             setTimeout(() => dispatch({ type: 'SET_DATA', payload: { key: 'savedConfirmation', value: null } }), 3000);
-        } catch(e) { showNotification("Errore salvataggio diagnosi.", "error"); }
-    }, [state.diagnosis, state.activeDiagnosisId, state.activeVehicle, state.savedDiagnoses, state.drafts.virtualMechanic.problemDescription, showNotification]);
+        } catch(e) { 
+            saveToLocal(KEYS.DIAGNOSES, updatedDiagnoses);
+            dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: updatedDiagnoses } });
+            showNotification("Salvato in locale (Errore Cloud).", "warning");
+        }
+    }, [state.diagnosis, state.activeDiagnosisId, state.activeVehicle, state.savedDiagnoses, state.drafts.virtualMechanic.problemDescription, state.usingLocalStorage, showNotification]);
 
     const handleLoadDiagnosis = useCallback((diagnosisId: string) => {
         const diagnosisToLoad = state.savedDiagnoses.find(d => d.id === diagnosisId);
@@ -647,21 +794,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const handleDeleteDiagnosis = useCallback(async (diagnosisId: string) => {
         if (!window.confirm("Eliminare questa diagnosi?")) return;
+        const updatedDiagnoses = state.savedDiagnoses.filter(d => d.id !== diagnosisId);
         try {
-            await fetch(`/api/diagnoses?id=${diagnosisId}`, { method: 'DELETE' });
+            if (!state.usingLocalStorage) {
+                await fetch(`/api/diagnoses?id=${diagnosisId}`, { method: 'DELETE' });
+            } else {
+                saveToLocal(KEYS.DIAGNOSES, updatedDiagnoses);
+            }
             if (state.activeDiagnosisId === diagnosisId) {
                 dispatch({ type: 'SET_DIAGNOSIS', payload: { diagnosis: null, diagnosisId: null }});
                 dispatch({ type: 'UPDATE_MECHANIC_DRAFT', payload: { problemDescription: '' } });
             }
-            const updatedDiagnoses = state.savedDiagnoses.filter(d => d.id !== diagnosisId);
             dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: updatedDiagnoses }});
-        } catch(e) { showNotification("Errore eliminazione diagnosi.", "error"); }
-    }, [state.activeDiagnosisId, state.savedDiagnoses, showNotification]);
+        } catch(e) { 
+            saveToLocal(KEYS.DIAGNOSES, updatedDiagnoses);
+            dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: updatedDiagnoses }});
+            showNotification("Eliminato in locale (Errore Cloud).", "warning");
+        }
+    }, [state.activeDiagnosisId, state.savedDiagnoses, state.usingLocalStorage, showNotification]);
 
     // Keep existing handlers for Mechanic Submit, Chat, PDF, Specs, Export/Import
     const handleMechanicSubmit = useCallback(async (e: FormEvent) => {
         e.preventDefault();
-        // ... (Existing implementation, reusing state logic)
         const { mechanicMode, tripHistory, activeVehicle, maintenanceLog } = state;
         const { problemDescription, problemImage } = state.drafts.virtualMechanic;
         // Validation...

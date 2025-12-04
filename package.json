@@ -13,7 +13,7 @@
     "react-dom": "^19.2.1",
     "@google/genai": "^1.29.0",
     "@heroicons/react": "^2.2.0",
-    "pg": "^8.16.3"
+    "@neondatabase/serverless": "^0.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

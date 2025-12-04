@@ -1,19 +1,17 @@
 
-import pool from './db.js';
+import sql from './db.js';
 
 export default async function handler(req, res) {
-  const client = await pool.connect();
   try {
     if (req.method === 'GET') {
-      const result = await client.query('SELECT data FROM saved_trips');
-      // Estrae direttamente l'oggetto JSON dalla colonna 'data'
-      const trips = result.rows.map(row => row.data);
+      const rows = await sql('SELECT data FROM saved_trips');
+      const trips = rows.map(row => row.data);
       return res.status(200).json(trips);
     } 
     
     if (req.method === 'POST') {
       const trip = req.body;
-      await client.query(`
+      await sql(`
         INSERT INTO saved_trips (id, data)
         VALUES ($1, $2)
       `, [trip.id, trip]);
@@ -22,7 +20,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'PUT') {
       const trip = req.body;
-      await client.query(`
+      await sql(`
         INSERT INTO saved_trips (id, data)
         VALUES ($1, $2)
         ON CONFLICT (id) DO UPDATE SET data = $2
@@ -32,7 +30,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'DELETE') {
       const { id } = req.query;
-      await client.query('DELETE FROM saved_trips WHERE id=$1', [id]);
+      await sql('DELETE FROM saved_trips WHERE id=$1', [id]);
       return res.status(200).json({ message: 'Trip deleted' });
     }
 
@@ -41,7 +39,5 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Database error' });
-  } finally {
-    client.release();
   }
 }

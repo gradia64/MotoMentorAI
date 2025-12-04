@@ -1,3 +1,4 @@
+
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -80,7 +81,8 @@ root.render(
 // --- PWA Service Worker Registration ---
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
+    // Use relative path with explicit scope to handle preview environments better
+    navigator.serviceWorker.register('./service-worker.js', { scope: './' })
       .then((registration) => {
         console.log('ServiceWorker registration successful with scope: ', registration.scope);
       })

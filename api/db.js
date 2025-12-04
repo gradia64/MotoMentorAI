@@ -1,12 +1,6 @@
 
-import pkg from 'pg';
-const { Pool } = pkg;
+import { neon } from '@neondatabase/serverless';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false, // Necessario per molte connessioni serverless/Neon
-  },
-});
+const sql = neon(process.env.DATABASE_URL);
 
-export default pool;
+export default sql;
