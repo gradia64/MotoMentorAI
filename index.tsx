@@ -1,4 +1,3 @@
-
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -14,9 +13,9 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
-// Fix: Explicitly extending Component can resolve certain TypeScript or linter
+// Fix: Explicitly extending React.Component can resolve certain TypeScript or linter
 // configuration issues where the props from the base class are not correctly inferred.
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {
