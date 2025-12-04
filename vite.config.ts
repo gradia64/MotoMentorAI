@@ -9,7 +9,8 @@ export default defineConfig(({ mode }) => {
   // FIX: Su Vercel (Produzione), le variabili d'ambiente sono in process.env.
   // loadEnv non le legge automaticamente se non sono in un file fisico.
   // Usiamo un fallback per garantire che la chiave venga letta correttamente sia in locale che in cloud.
-  const apiKey = env.API_KEY || process.env.API_KEY;
+  // UPDATE: Aggiunto supporto esplicito per GEMINI_API_KEY come nome alternativo.
+  const apiKey = env.API_KEY || process.env.API_KEY || env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
   return {
     plugins: [react()],

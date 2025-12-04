@@ -13,9 +13,8 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
-// Fix: Explicitly extending React.Component can resolve certain TypeScript or linter
-// configuration issues where the props from the base class are not correctly inferred.
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fix: Explicitly extending Component from named import ensures types are correctly inferred.
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {
