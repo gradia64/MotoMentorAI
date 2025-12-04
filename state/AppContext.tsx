@@ -1,8 +1,8 @@
 
 import React, { createContext, useReducer, useContext, useEffect, ReactNode, useCallback, FormEvent, useRef, useState } from 'react';
 import { Chat, Content } from '@google/genai';
-import { generateItinerary, diagnoseProblem, getMaintenanceTips, createChatSession, getVehicleSpecs } from '../services/geminiService';
-import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, SavedTrip, MaintenanceRecord, MaintenanceReminder, SavedDiagnosis } from '../types';
+import { generateItinerary, diagnoseProblem, getMaintenanceTips, createChatSession, getVehicleSpecs, generateTripDiarySummary } from '../services/geminiService';
+import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, SavedTrip, MaintenanceRecord, MaintenanceReminder, SavedDiagnosis, DiaryEntry } from '../types';
 import { useLocalStorage } from '../utils/hooks';
 import { generatePdf } from '../utils/pdf';
 
@@ -39,6 +39,7 @@ interface AppState {
     isGeneratingPdf: boolean;
     isGeneratingDiagnosisPdf: boolean;
     isGeneratingChecklistPdf: boolean;
+    isGeneratingDiarySummary: boolean;
     error: string | null;
     notification: Notification | null;
     savedConfirmation: string | null;
@@ -62,6 +63,9 @@ interface AppState {
     diagnosis: string | null;
     activeDiagnosisId: string | null;
     maintenanceTips: MaintenanceTips | null;
+    
+    // Diary
+    activeDiaryTripId: string | null;
     
     // Chat
     chatSession: Chat | null;
@@ -99,6 +103,7 @@ type AppAction =
     | { type: 'SET_PDF_GENERATING'; payload: boolean }
     | { type: 'SET_DIAGNOSIS_PDF_GENERATING'; payload: boolean }
     | { type: 'SET_CHECKLIST_PDF_GENERATING'; payload: boolean }
+    | { type: 'SET_DIARY_SUMMARY_GENERATING'; payload: boolean }
     | { type: 'SET_ERROR'; payload: string | null }
     | { type: 'SET_NOTIFICATION'; payload: Notification | null }
     | { type: 'SET_DATA'; payload: { key: keyof AppState, value: any } }
@@ -108,7 +113,8 @@ type AppAction =
     | { type: 'UPDATE_MECHANIC_DRAFT'; payload: Partial<AppState['drafts']['virtualMechanic']> }
     | { type: 'SET_MECHANIC_MODE'; payload: 'diagnose' | 'maintenance' | 'workshop' }
     | { type: 'RESET_TRIP_PLANNER_FORM' }
-    | { type: 'SET_USING_LOCAL_STORAGE'; payload: boolean };
+    | { type: 'SET_USING_LOCAL_STORAGE'; payload: boolean }
+    | { type: 'SET_ACTIVE_DIARY_TRIP'; payload: string | null };
 
 
 // --- INITIAL STATE ---
@@ -122,6 +128,7 @@ const initialState: AppState = {
     isGeneratingPdf: false,
     isGeneratingDiagnosisPdf: false,
     isGeneratingChecklistPdf: false,
+    isGeneratingDiarySummary: false,
     error: null,
     notification: null,
     savedConfirmation: null,
@@ -139,6 +146,7 @@ const initialState: AppState = {
     diagnosis: null,
     activeDiagnosisId: null,
     maintenanceTips: null,
+    activeDiaryTripId: null,
     chatSession: null,
     chatHistory: [],
     chatHistoryList: [],
@@ -174,6 +182,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
         case 'SET_PDF_GENERATING': return { ...state, isGeneratingPdf: action.payload };
         case 'SET_DIAGNOSIS_PDF_GENERATING': return { ...state, isGeneratingDiagnosisPdf: action.payload };
         case 'SET_CHECKLIST_PDF_GENERATING': return { ...state, isGeneratingChecklistPdf: action.payload };
+        case 'SET_DIARY_SUMMARY_GENERATING': return { ...state, isGeneratingDiarySummary: action.payload };
         case 'SET_ERROR': return { ...state, error: action.payload, isGeneratingItinerary: false, isDiagnosingProblem: false, isGeneratingChecklist: false, isChatLoading: false, isGeneratingPdf: false, isLoadingData: false };
         case 'SET_NOTIFICATION': return { ...state, notification: action.payload };
         case 'SET_DATA': return { ...state, [action.payload.key]: action.payload.value };
@@ -193,6 +202,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             }
         };
         case 'SET_USING_LOCAL_STORAGE': return { ...state, usingLocalStorage: action.payload };
+        case 'SET_ACTIVE_DIARY_TRIP': return { ...state, activeDiaryTripId: action.payload };
         default: return state;
     }
 };
@@ -289,6 +299,9 @@ interface AppContextType {
     handleDownloadDiagnosisPdf: () => void;
     handleDownloadChecklistPdf: () => void;
     handleGenerateSpecs: (model: string, year: string) => Promise<{displacement?: string, power?: string, frontTire?: string, rearTire?: string} | null>;
+    handleUpdateTrip: (updatedTrip: SavedTrip) => void;
+    handleGenerateDiarySummary: (trip: SavedTrip) => Promise<void>;
+    handleDownloadDiaryPdf: (trip: SavedTrip) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -627,6 +640,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [state.itinerary, state.activeTripId, state.tripHistory, state.drafts.tripPlanner, state.usingLocalStorage, showNotification]);
 
+    const handleUpdateTrip = useCallback(async (updatedTrip: SavedTrip) => {
+        const updatedHistory = state.tripHistory.map(t => t.id === updatedTrip.id ? updatedTrip : t);
+        try {
+            if (!state.usingLocalStorage) {
+                await fetch('/api/trips', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updatedTrip)
+                });
+            } else {
+                saveToLocal(KEYS.TRIPS, updatedHistory);
+            }
+            dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: updatedHistory } });
+            showNotification("Viaggio aggiornato!");
+        } catch (e) {
+            saveToLocal(KEYS.TRIPS, updatedHistory);
+            dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: updatedHistory } });
+            showNotification("Errore Cloud. Aggiornato in locale.", "warning");
+        }
+    }, [state.tripHistory, state.usingLocalStorage, showNotification]);
+
     const handleSaveAndReset = useCallback(() => {
         saveItinerary();
         dispatch({ type: 'RESET_TRIP_PLANNER_FORM' });
@@ -663,6 +697,65 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [state.activeTripId, state.tripHistory, state.usingLocalStorage, showNotification]);
     
+    // --- DIARY HANDLERS ---
+    const handleGenerateDiarySummary = useCallback(async (trip: SavedTrip) => {
+        if (!trip.diaryEntries || trip.diaryEntries.length === 0) {
+            showNotification("Aggiungi almeno una nota al diario prima di generare il riassunto.", "warning");
+            return;
+        }
+        dispatch({ type: 'SET_DIARY_SUMMARY_GENERATING', payload: true });
+        try {
+            const summary = await generateTripDiarySummary(trip.itinerary, trip.diaryEntries);
+            const updatedTrip = { ...trip, diarySummary: summary };
+            await handleUpdateTrip(updatedTrip);
+        } catch (error) {
+            showNotification("Errore nella generazione del riassunto.", "error");
+        } finally {
+            dispatch({ type: 'SET_DIARY_SUMMARY_GENERATING', payload: false });
+        }
+    }, [handleUpdateTrip, showNotification]);
+
+    const handleDownloadDiaryPdf = useCallback((trip: SavedTrip) => {
+        const buildContent = ({ addWrappedText, addSeparator }: any) => {
+            // Intro
+            addWrappedText(`Diario di Viaggio: ${trip.itinerary.tripTitle}`, { size: 18, marginBottom: 10 });
+            addWrappedText(trip.itinerary.generalDescription, { size: 12, marginBottom: 15, color: [60] });
+            addSeparator({ marginBottom: 10 });
+
+            // Summary (if exists)
+            if (trip.diarySummary) {
+                addWrappedText("Il Racconto dell'Avventura (AI)", { size: 14, marginBottom: 5, color: [37, 99, 235] });
+                addWrappedText(trip.diarySummary, { size: 11, marginBottom: 15 });
+                addSeparator({ marginBottom: 10 });
+            }
+
+            // Daily Entries
+            trip.itinerary.dailySchedule.forEach((day) => {
+                const entry = trip.diaryEntries?.find(e => e.day === day.day);
+                
+                addWrappedText(`Giorno ${day.day}: ${day.stageTitle}`, { size: 14, marginBottom: 5, color: [40] });
+                addWrappedText(`Percorso: ${day.routeDescription}`, { size: 10, marginBottom: 3, color: [100] });
+                addWrappedText(`${day.stageKilometers} km - ${day.weatherForecast.conditions}`, { size: 10, marginBottom: 5, color: [100] });
+                
+                if (entry && entry.content.trim()) {
+                     addWrappedText("Note del Motociclista:", { size: 11, marginBottom: 2, color: [30] });
+                     addWrappedText(entry.content, { size: 11, marginBottom: 10, color: [0] });
+                } else {
+                     addWrappedText("(Nessuna nota registrata per questo giorno)", { size: 10, marginBottom: 10, color: [150], isListItem: true });
+                }
+                
+                addSeparator({ marginBottom: 10, marginTop: 5 });
+            });
+        };
+
+        try {
+            generatePdf(`Diario_${trip.itinerary.tripTitle.replace(/\s/g, '_')}.pdf`, "MotoMentor AI - Diario", buildContent);
+        } catch (e: any) {
+            console.error(e);
+            showNotification("Errore generazione PDF: " + e.message, 'error');
+        }
+    }, [showNotification]);
+
     // --- MAINTENANCE HANDLERS ---
     const handleAddMaintenanceRecord = useCallback(async (newRecordData: Omit<MaintenanceRecord, 'id'>) => {
         const newRecord = { ...newRecordData, id: Date.now().toString() };
@@ -978,6 +1071,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         handleDownloadDiagnosisPdf,
         handleDownloadChecklistPdf,
         handleGenerateSpecs,
+        handleUpdateTrip,
+        handleGenerateDiarySummary,
+        handleDownloadDiaryPdf,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

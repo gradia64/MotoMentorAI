@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, ClockIcon, BookOpenIcon } from '@heroicons/react/24/outline';
 
 import { AiMode } from './types';
 import { AppProvider, useAppContext } from './state/AppContext';
@@ -8,6 +8,7 @@ import TripPlanner from './features/TripPlanner/TripPlanner';
 import VirtualMechanic from './features/VirtualMechanic/VirtualMechanic';
 import Garage from './features/Garage/Garage';
 import AiChat from './features/AiChat/AiChat';
+import TripDiary from './features/TripDiary/TripDiary'; // Import new feature
 import TabButton from './components/TabButton';
 import Notification from './components/Notification';
 import Logo from './components/Logo';
@@ -27,6 +28,7 @@ const MemoizedTripPlanner = React.memo(TripPlanner);
 const MemoizedVirtualMechanic = React.memo(VirtualMechanic);
 const MemoizedGarage = React.memo(Garage);
 const MemoizedAiChat = React.memo(AiChat);
+const MemoizedTripDiary = React.memo(TripDiary); // Memoize new component
 
 const AppContent: React.FC = () => {
     const { state, dispatch } = useAppContext();
@@ -78,11 +80,12 @@ const AppContent: React.FC = () => {
                 )}
 
                 <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-                    <div className="flex border-b border-gray-700">
-                        <TabButton text="Planner Viaggi" icon={<MapPinIcon className="w-5 h-5"/>} active={state.mode === AiMode.TripPlanner} onClick={() => setMode(AiMode.TripPlanner)} />
-                        <TabButton text="Meccanico Virtuale" icon={<WrenchScrewdriverIcon className="w-5 h-5"/>} active={state.mode === AiMode.VirtualMechanic} onClick={() => setMode(AiMode.VirtualMechanic)} />
-                        <TabButton text="Il Mio Garage" icon={<CogIcon className="w-5 h-5"/>} active={state.mode === AiMode.Garage} onClick={() => setMode(AiMode.Garage)} />
-                        <TabButton text="AI Chat" icon={<ChatBubbleLeftRightIcon className="w-5 h-5"/>} active={state.mode === AiMode.AiChat} onClick={() => setMode(AiMode.AiChat)} />
+                    <div className="flex border-b border-gray-700 overflow-x-auto scrollbar-hide">
+                        <TabButton text="Planner" icon={<MapPinIcon className="w-5 h-5"/>} active={state.mode === AiMode.TripPlanner} onClick={() => setMode(AiMode.TripPlanner)} />
+                        <TabButton text="Diario" icon={<BookOpenIcon className="w-5 h-5"/>} active={state.mode === AiMode.TripDiary} onClick={() => setMode(AiMode.TripDiary)} />
+                        <TabButton text="Meccanico" icon={<WrenchScrewdriverIcon className="w-5 h-5"/>} active={state.mode === AiMode.VirtualMechanic} onClick={() => setMode(AiMode.VirtualMechanic)} />
+                        <TabButton text="Garage" icon={<CogIcon className="w-5 h-5"/>} active={state.mode === AiMode.Garage} onClick={() => setMode(AiMode.Garage)} />
+                        <TabButton text="Chat" icon={<ChatBubbleLeftRightIcon className="w-5 h-5"/>} active={state.mode === AiMode.AiChat} onClick={() => setMode(AiMode.AiChat)} />
                     </div>
                     <div className="p-4 md:p-6">
                         {state.error && (
@@ -96,6 +99,7 @@ const AppContent: React.FC = () => {
                         )}
 
                         {state.mode === AiMode.TripPlanner && <MemoizedTripPlanner />}
+                        {state.mode === AiMode.TripDiary && <MemoizedTripDiary />}
                         {state.mode === AiMode.VirtualMechanic && <MemoizedVirtualMechanic />}
                         {state.mode === AiMode.Garage && <MemoizedGarage />}
                         {state.mode === AiMode.AiChat && <MemoizedAiChat />}

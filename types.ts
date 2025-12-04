@@ -6,6 +6,7 @@ export enum AiMode {
     VirtualMechanic = 'VirtualMechanic',
     Garage = 'Garage',
     AiChat = 'AiChat',
+    TripDiary = 'TripDiary',
 }
 
 export enum MaintenanceType {
@@ -86,6 +87,11 @@ export interface GarageVehicle {
     notes?: string;
 }
 
+export interface DiaryEntry {
+    day: number;
+    content: string; // User notes: places, roads, emotions
+}
+
 export interface SavedTrip {
     id: string;
     inputs: {
@@ -100,6 +106,8 @@ export interface SavedTrip {
         customPrompt?: string;
     };
     itinerary: Itinerary;
+    diaryEntries?: DiaryEntry[]; // Array of user notes per day
+    diarySummary?: string; // AI Generated final report
 }
 
 export interface SavedDiagnosis {

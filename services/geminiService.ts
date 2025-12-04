@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Part, Chat } from "@google/genai";
-import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, MaintenanceRecord, VEHICLE_SPECS_SCHEMA } from '../types';
+import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, MaintenanceRecord, VEHICLE_SPECS_SCHEMA, DiaryEntry } from '../types';
 
 // --- SECURITY WARNING & PROXY ARCHITECTURE ---
 // In a production app, the API key must NEVER be exposed in the frontend.
@@ -215,6 +215,26 @@ Considerando il chilometraggio attuale della moto, lo storico degli interventi, 
 Fornisci la risposta esclusivamente in formato JSON.`;
 };
 
+const buildTripDiarySummaryPrompt = (itinerary: Itinerary, entries: DiaryEntry[]): string => {
+    const diaryContent = entries.map(e => `Giorno ${e.day}: "${e.content}"`).join('\n');
+    
+    return `Agisci come un talentuoso scrittore di viaggi e motociclista appassionato.
+Il tuo compito è scrivere un "Diario di Viaggio" narrativo e coinvolgente basato sui piani originali del viaggio e sulle note reali prese dal motociclista durante l'avventura.
+
+**Il Viaggio:** "${itinerary.tripTitle}"
+**Descrizione Originale:** "${itinerary.generalDescription}"
+
+**Note Giornaliere del Motociclista:**
+${diaryContent}
+
+Scrivi un racconto in prima persona che unisca l'itinerario previsto con le esperienze reali vissute (descritte nelle note).
+- Cattura l'emozione della guida, la bellezza dei luoghi visitati e le sensazioni provate.
+- Se le note sono scarne per un giorno, usa la tua creatività basandoti sull'itinerario previsto per quel giorno per arricchire la narrazione, mantenendo però coerenza con le note presenti.
+- Struttura il racconto giorno per giorno o come un flusso narrativo unico, a tua scelta, per renderlo il più piacevole possibile da leggere.
+- Concludi con una riflessione finale sull'esperienza.
+Usa lo stile Markdown per formattare il testo (titoli, grassetti, corsivi).`;
+};
+
 
 // --- SERVICE FUNCTIONS ---
 
@@ -266,6 +286,11 @@ export const getMaintenanceTips = async (
     };
     const apiResponse = await apiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] }, config);
     return mapApiMaintenanceTipsToApp(apiResponse);
+};
+
+export const generateTripDiarySummary = async (itinerary: Itinerary, entries: DiaryEntry[]): Promise<string> => {
+    const prompt = buildTripDiarySummaryPrompt(itinerary, entries);
+    return await textApiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] });
 };
 
 export const getVehicleSpecs = async (model: string, year: string) => {
