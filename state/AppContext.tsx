@@ -323,7 +323,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         dispatch({ type: 'SET_LOADING_DATA', payload: true });
         try {
             // Attempt to fetch from API first
-            const [vehiclesRes, logsRes, remindersRes, tripsRes, diagnosesRes] = await Promise.all([
+            const responses = await Promise.all([
                 fetch('/api/garage'),
                 fetch('/api/maintenance'),
                 fetch('/api/reminders'),
@@ -331,16 +331,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 fetch('/api/diagnoses')
             ]);
 
-            // If API not available (returns HTML/404), throw to trigger fallback
-            if (!vehiclesRes.ok || !vehiclesRes.headers.get('content-type')?.includes('application/json')) {
-                 throw new Error("API not available");
+            // Enhanced Error Handling
+            const firstError = responses.find(r => !r.ok);
+            if (firstError) {
+                // If 404 (Not Found), it means the API backend is missing (e.g., Preview mode).
+                // Handle gracefully by throwing a specific error to skip console spam.
+                if (firstError.status === 404) {
+                    console.warn("Backend API not found (404). Switching to Offline Mode.");
+                    throw new Error("OfflineMode");
+                }
+
+                console.error(`API Error: ${firstError.status} ${firstError.statusText} at ${firstError.url}`);
+                try {
+                     const errorBody = await firstError.text();
+                     console.error("API Error Body:", errorBody);
+                } catch (e) { /* ignore */ }
+                
+                throw new Error(`API connection failed: ${firstError.status}`);
+            }
+            
+            // Check for valid JSON content type
+            const firstInvalidType = responses.find(r => !r.headers.get('content-type')?.includes('application/json'));
+            if (firstInvalidType) {
+                 console.error(`Invalid Content-Type at ${firstInvalidType.url}: ${firstInvalidType.headers.get('content-type')}`);
+                 throw new Error("API returned invalid data format (HTML instead of JSON?)");
             }
 
-            const vehicles: GarageVehicle[] = await vehiclesRes.json();
-            const logs: MaintenanceRecord[] = await logsRes.json();
-            const reminders: MaintenanceReminder[] = await remindersRes.json();
-            const trips: SavedTrip[] = await tripsRes.json();
-            const diagnoses: SavedDiagnosis[] = await diagnosesRes.json();
+            const vehicles: GarageVehicle[] = await responses[0].json();
+            const logs: MaintenanceRecord[] = await responses[1].json();
+            const reminders: MaintenanceReminder[] = await responses[2].json();
+            const trips: SavedTrip[] = await responses[3].json();
+            const diagnoses: SavedDiagnosis[] = await responses[4].json();
 
             dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: vehicles } });
             dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: logs } });
@@ -349,8 +370,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: diagnoses } });
             dispatch({ type: 'SET_USING_LOCAL_STORAGE', payload: false });
 
-        } catch (error) {
-            console.warn("API Cloud non disponibile. Passaggio alla modalità locale (LocalStorage).", error);
+        } catch (error: any) {
+            // Only log if it's NOT our expected "OfflineMode" error
+            if (error.message !== "OfflineMode") {
+                console.warn("API Cloud non disponibile o errore di connessione.", error);
+            }
+            
             // FALLBACK TO LOCAL STORAGE
             dispatch({ type: 'SET_USING_LOCAL_STORAGE', payload: true });
             
@@ -368,26 +393,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
             showNotification("Modalità Offline: Dati caricati dal dispositivo.", "success");
         } finally {
-            // Post-load calculations (always run)
-            // We need to use state updater or access 'values' from above, but since dispatch is async relative to render,
-            // we rely on the fact that we dispatched SET_DATA. 
-            // Better: Recalculate based on what we just loaded.
-            
-            // Re-read directly from source to ensure sync calculation
-            const isLocal = state.usingLocalStorage; // This might be stale, check logic flow
-            // Actually, we can just trigger a second effect or just assume the next render handles it?
-            // Let's do it manually with the data we have in scope.
-            // But variables are inside try/catch blocks.
-            // Simplified: The useEffect below or the reducer will handle simple updates, but activeVehicle needs to be set.
-            
-            // To be safe, we let the component re-render. 
-            // BUT activeVehicle needs to be set immediately after data load to prevent UI flicker.
-            // Since we can't easily access the loaded data here across the try/catch boundary cleanly without duplication:
-            // We defer 'activeVehicle' setting to a useEffect dependency on garageVehicles.
-            
             dispatch({ type: 'SET_LOADING_DATA', payload: false });
         }
-    }, [storedActiveId]);
+    }, [storedActiveId, showNotification]);
 
     useEffect(() => {
         fetchData();
@@ -434,6 +442,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     
     // --- CRUD HANDLERS (HYBRID) ---
+
+    // Moved handleSetActiveVehicle before handleAddVehicle to avoid usage before declaration
+    const handleSetActiveVehicle = useCallback((id: string, currentVehicles = state.garageVehicles) => {
+        const vehicleToSet = currentVehicles.find(v => v.id === id);
+        if (vehicleToSet) {
+            setStoredActiveId(id);
+            dispatch({ type: 'SET_DATA', payload: { key: 'activeVehicle', value: vehicleToSet } });
+        }
+    }, [state.garageVehicles, setStoredActiveId]);
     
     const handleAddVehicle = useCallback(async (newVehicleData: Omit<GarageVehicle, 'id'>) => {
         const newVehicle: GarageVehicle = { ...newVehicleData, id: Date.now().toString() };
@@ -463,7 +480,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
              dispatch({ type: 'SET_USING_LOCAL_STORAGE', payload: true });
              showNotification("Errore Cloud. Veicolo salvato in locale.", "warning");
         }
-    }, [state.garageVehicles, state.usingLocalStorage, showNotification]);
+    }, [state.garageVehicles, state.usingLocalStorage, showNotification, handleSetActiveVehicle]);
 
     const handleUpdateVehicle = useCallback(async (updatedVehicle: GarageVehicle) => {
         const updatedVehicles = state.garageVehicles.map(v => v.id === updatedVehicle.id ? updatedVehicle : v);
@@ -513,14 +530,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             showNotification("Rimosso in locale (Errore Cloud).", "warning");
         }
     }, [state.garageVehicles, state.activeVehicle?.id, state.usingLocalStorage, setStoredActiveId, showNotification]);
-
-    const handleSetActiveVehicle = useCallback((id: string, currentVehicles = state.garageVehicles) => {
-        const vehicleToSet = currentVehicles.find(v => v.id === id);
-        if (vehicleToSet) {
-            setStoredActiveId(id);
-            dispatch({ type: 'SET_DATA', payload: { key: 'activeVehicle', value: vehicleToSet } });
-        }
-    }, [state.garageVehicles, setStoredActiveId]);
 
     // --- TRIPS ---
     const handleTripSubmit = useCallback(async (e: FormEvent) => {
