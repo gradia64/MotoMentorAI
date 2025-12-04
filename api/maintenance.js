@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     res.setHeader('Allow', ['GET', 'POST', 'DELETE']);
     res.status(405).end(`Method ${req.method} Not Allowed`);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Database error' });
+    console.error("Database Error in Maintenance API:", error);
+    res.status(500).json({ error: error.message });
   }
 }

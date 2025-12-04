@@ -335,19 +335,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const firstError = responses.find(r => !r.ok);
             if (firstError) {
                 // If 404 (Not Found), it means the API backend is missing (e.g., Preview mode).
-                // Handle gracefully by throwing a specific error to skip console spam.
                 if (firstError.status === 404) {
                     console.warn("Backend API not found (404). Switching to Offline Mode.");
                     throw new Error("OfflineMode");
                 }
 
+                // If 500 or other errors, try to read the JSON message from the backend
                 console.error(`API Error: ${firstError.status} ${firstError.statusText} at ${firstError.url}`);
+                let errorDetails = `API connection failed: ${firstError.status}`;
                 try {
-                     const errorBody = await firstError.text();
-                     console.error("API Error Body:", errorBody);
-                } catch (e) { /* ignore */ }
+                     const errorBody = await firstError.json();
+                     if (errorBody.error) errorDetails += ` - ${errorBody.error}`;
+                } catch (e) { 
+                    try {
+                        const textBody = await firstError.text();
+                        if(textBody) errorDetails += ` - ${textBody.substring(0, 50)}`;
+                    } catch(t) {}
+                }
                 
-                throw new Error(`API connection failed: ${firstError.status}`);
+                throw new Error(errorDetails);
             }
             
             // Check for valid JSON content type
@@ -374,6 +380,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Only log if it's NOT our expected "OfflineMode" error
             if (error.message !== "OfflineMode") {
                 console.warn("API Cloud non disponibile o errore di connessione.", error);
+                // Show specific error info in notification for easier debugging
+                showNotification(`Offline Mode: ${error.message}`, "warning");
+            } else {
+                 showNotification("Modalità Offline: Dati caricati dal dispositivo.", "success");
             }
             
             // FALLBACK TO LOCAL STORAGE
@@ -391,7 +401,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: trips } });
             dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: diagnoses } });
 
-            showNotification("Modalità Offline: Dati caricati dal dispositivo.", "success");
         } finally {
             dispatch({ type: 'SET_LOADING_DATA', payload: false });
         }

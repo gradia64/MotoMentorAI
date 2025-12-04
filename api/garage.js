@@ -74,7 +74,8 @@ export default async function handler(req, res) {
     res.setHeader('Allow', ['GET', 'POST', 'PUT', 'DELETE']);
     res.status(405).end(`Method ${req.method} Not Allowed`);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Database error' });
+    console.error("Database Error in Garage API:", error);
+    // Restituisce il messaggio di errore specifico per facilitare il debug su Vercel/Frontend
+    res.status(500).json({ error: error.message });
   }
 }
