@@ -13,7 +13,7 @@ export default async function handler(req, res) {
       const trip = req.body;
       await sql`
         INSERT INTO saved_trips (id, data)
-        VALUES (${trip.id}, ${trip})
+        VALUES (${trip.id}, ${JSON.stringify(trip)})
       `;
       return res.status(201).json({ message: 'Trip saved' });
     }
@@ -22,8 +22,8 @@ export default async function handler(req, res) {
       const trip = req.body;
       await sql`
         INSERT INTO saved_trips (id, data)
-        VALUES (${trip.id}, ${trip})
-        ON CONFLICT (id) DO UPDATE SET data = ${trip}
+        VALUES (${trip.id}, ${JSON.stringify(trip)})
+        ON CONFLICT (id) DO UPDATE SET data = ${JSON.stringify(trip)}
       `;
       return res.status(200).json({ message: 'Trip updated' });
     }
