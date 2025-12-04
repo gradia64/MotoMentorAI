@@ -380,8 +380,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             // Only log if it's NOT our expected "OfflineMode" error
             if (error.message !== "OfflineMode") {
                 console.warn("API Cloud non disponibile o errore di connessione.", error);
-                // Show specific error info in notification for easier debugging
-                showNotification(`Offline Mode: ${error.message}`, "warning");
+                
+                // --- SPECIAL HANDLING FOR TABLE MISSING ERROR ---
+                if (error.message.includes('relation') && error.message.includes('does not exist')) {
+                    showNotification("DATABASE VUOTO! Esegui lo script SQL su Neon per creare le tabelle.", "error");
+                } else {
+                    // Show specific error info in notification for easier debugging
+                    showNotification(`Offline Mode: ${error.message}`, "warning");
+                }
             } else {
                  showNotification("Modalità Offline: Dati caricati dal dispositivo.", "success");
             }
