@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, ClockIcon, BookOpenIcon } from '@heroicons/react/24/outline';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 import { AiMode } from './types';
 import { AppProvider, useAppContext } from './state/AppContext';
@@ -124,6 +125,7 @@ const App: React.FC = () => {
     return (
         <AppProvider>
             <AppContent />
+            <SpeedInsights />
         </AppProvider>
     );
 };
