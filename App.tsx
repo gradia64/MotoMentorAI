@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, ClockIcon, BookOpenIcon } from '@heroicons/react/24/outline';
 
@@ -12,6 +11,7 @@ import TripDiary from './features/TripDiary/TripDiary'; // Import new feature
 import TabButton from './components/TabButton';
 import Notification from './components/Notification';
 import Logo from './components/Logo';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 // Declare jspdf from window for global access
 declare global {
@@ -122,9 +122,12 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
     return (
+      <>
         <AppProvider>
             <AppContent />
         </AppProvider>
+        <SpeedInsights />
+      </>
     );
 };
 
