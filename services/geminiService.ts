@@ -1,64 +1,35 @@
 
-import { GoogleGenAI, Part, Chat } from "@google/genai";
+import { GoogleGenAI, Part, Chat, Type } from "@google/genai";
 import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, MaintenanceRecord, VEHICLE_SPECS_SCHEMA, DiaryEntry } from '../types';
 
-// --- SECURITY WARNING & PROXY ARCHITECTURE ---
-// In a production app, the API key must NEVER be exposed in the frontend.
-// This service simulates a backend proxy. All API calls from the app
-// must go through this service. In a real-world scenario, this file's logic
-// would be on a secure server (e.g., a Node.js endpoint).
-const apiKey = process.env.API_KEY;
-
-let ai: GoogleGenAI | null = null;
 const getAi = () => {
-    if (!ai) {
-        if (!apiKey) {
-            console.error("API_KEY environment variable not set.");
-            throw new Error("La chiave API non è configurata. L'applicazione non può funzionare.");
-        }
-        ai = new GoogleGenAI({ apiKey });
-    }
-    return ai;
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) throw new Error("API_KEY non configurata.");
+    return new GoogleGenAI({ apiKey });
 };
 
-
-// --- API PROXY SIMULATOR ---
-// Centralizes API calls and error handling.
-const apiProxy = async (model: string, contents: { parts: Part[] | string }, config: any) => {
+const apiProxy = async (model: string, contents: any, config: any) => {
     try {
-        const response = await getAi().models.generateContent({ model, contents, config });
-        const jsonText = response.text.trim();
-        return JSON.parse(jsonText);
+        const ai = getAi();
+        const response = await ai.models.generateContent({ model, contents, config });
+        return JSON.parse((response.text || "").trim());
     } catch (e: any) {
         console.error("API Proxy Error:", e);
-        if (e.message.includes("API key not valid")) {
-             throw new Error("La chiave API fornita non è valida. Controlla la tua configurazione.");
-        }
-        if (e instanceof SyntaxError) {
-             throw new Error("La risposta del server non è un formato JSON valido. L'IA potrebbe aver restituito un formato inaspettato.");
-        }
-        throw new Error("Si è verificato un errore durante la comunicazione con il servizio AI.");
+        throw new Error("Errore durante la comunicazione con l'IA.");
     }
 };
 
-const textApiProxy = async (model: string, contents: { parts: Part[] | string }, config?: any) => {
+const textApiProxy = async (model: string, contents: any, config?: any) => {
     try {
-         const response = await getAi().models.generateContent({ model, contents, config });
-         return response.text;
+         const ai = getAi();
+         const response = await ai.models.generateContent({ model, contents, config });
+         return response.text || "Nessuna risposta generata.";
     } catch (e: any) {
-         console.error("Text API Proxy Error:", e);
-         throw new Error("Si è verificato un errore durante la generazione del testo da parte dell'IA.");
+         throw new Error("Errore nella generazione del testo.");
     }
 };
 
-
-// --- Mappers ---
 const mapApiItineraryToAppItinerary = (apiResponse: any): Itinerary => {
-    if (!apiResponse || !apiResponse.programma_giornaliero || !Array.isArray(apiResponse.programma_giornaliero)) {
-        console.error("Invalid itinerary response from API:", apiResponse);
-        throw new Error("La risposta dell'IA non è nel formato atteso.");
-    }
-
     return {
         tripTitle: apiResponse.titolo_viaggio,
         generalDescription: apiResponse.descrizione_generale,
@@ -83,181 +54,73 @@ const mapApiItineraryToAppItinerary = (apiResponse: any): Itinerary => {
     };
 };
 
-const mapApiMaintenanceTipsToApp = (apiResponse: any): MaintenanceTips => {
-    if (!apiResponse || !apiResponse.controlli_essenziali || !apiResponse.suggerimenti_specifici_viaggio || !apiResponse.equipaggiamento_emergenza) {
-        throw new Error("La checklist di manutenzione restituita dall'IA non è nel formato atteso.");
-    }
-    return {
-        essentialChecks: apiResponse.controlli_essenziali,
-        tripSpecificTips: apiResponse.suggerimenti_specifici_viaggio,
-        emergencyEquipment: apiResponse.equipaggiamento_emergenza,
-    };
-};
-
-const mapApiSpecsToApp = (apiResponse: any) => {
-     return {
-        displacement: apiResponse.cilindrata,
-        power: apiResponse.potenza,
-        frontTire: apiResponse.pneumatico_anteriore,
-        rearTire: apiResponse.pneumatico_posteriore,
-     };
-};
-
-
-// --- PROMPT BUILDERS ---
-
-interface ItineraryOptions {
-    departure?: string;
-    destination?: string;
-    tourName?: string;
-    duration: string;
-    roadPreference: string;
-    period: string;
-    motorcycle?: GarageVehicle;
-    customPrompt?: string;
-}
-
-const buildItineraryPrompt = (options: ItineraryOptions): string => {
+export const generateItinerary = async (options: any): Promise<Itinerary> => {
     const { departure, destination, tourName, duration, roadPreference, period, motorcycle, customPrompt } = options;
-    
-    const motorcycleInfo = motorcycle?.model
-        ? `Veicolo: ${motorcycle.model} (${motorcycle.year}), ${motorcycle.kilometers} km. Adatta l'itinerario a questo tipo di moto.`
-        : '';
-    
-    const periodInfo = period ? `Periodo: ${period}.` : '';
-        
-    const extraFieldsPrompt = `- Per ogni giorno: \`consigli_di_guida\`, \`opzione_ristoro\`, \`alloggio_consigliato\`.`;
+    const prompt = `Sei MotoMentor, il miglior pianificatore di viaggi avventura al mondo. 
+Crea un itinerario di ${duration} giorni ${tourName ? `per il tour "${tourName}"` : `da ${departure} a ${destination}`}.
+Periodo: ${period}. Strade: ${roadPreference}. 
+${motorcycle ? `Mezzo: ${motorcycle.model} (${motorcycle.year}).` : ''}
+FILOSOFIA: Solo curve, borghi e passi. No autostrade. Extra: ${customPrompt || 'Nessuna'}.`;
 
-    const motorcycleRoutingPhilosophy = `- **FILOSOFIA MOTOTURISMO**: Massimizza curve e panorami. Evita autostrade e centri urbani se non indispensabili.`;
-    
-    const customPromptInfo = customPrompt?.trim() ? `- **RICHIESTA UTENTE**: "${customPrompt}".` : '';
-        
-    if (tourName) {
-         return `Crea itinerario moto di ${duration} giorni per il tour "${tourName}" partendo da ${departure}.
-- ${periodInfo}
-- Preferenza strade: ${roadPreference}.
-- ${motorcycleRoutingPhilosophy}
-- Includi tracciato GPX realistico e meteo.
-- ${extraFieldsPrompt}
-- ${motorcycleInfo}
-- ${customPromptInfo}
-Rispondi esclusivamente in JSON.`;
-    }
-    return `Crea itinerario moto di ${duration} giorni da ${departure} a ${destination}.
-- ${periodInfo}
-- Preferenza strade: ${roadPreference}.
-- ${motorcycleRoutingPhilosophy}
-- Includi tracciato GPX realistico e meteo.
-- ${extraFieldsPrompt}
-- ${motorcycleInfo}
-- ${customPromptInfo}
-Rispondi esclusivamente in JSON.`;
-};
-
-const buildDiagnosisPrompt = (problemDescription: string, motorcycle: GarageVehicle): string => {
-    return `Agisci come meccanico esperto. Diagnostica il problema per una ${motorcycle.model} (${motorcycle.year}) con ${motorcycle.kilometers} km.
-Problema: "${problemDescription}".
-Analizza basandoti su dati tecnici ufficiali e intervalli di manutenzione. Fornisci cause probabili e passi per la verifica.`;
-};
-
-const buildMaintenanceTipsPrompt = (motorcycle: GarageVehicle, itinerary: Itinerary, maintenanceLog: MaintenanceRecord[]): string => {
-    const totalTripKm = itinerary.dailySchedule.reduce((total, day) => total + day.stageKilometers, 0);
-    const maintenanceHistoryString = maintenanceLog.map(record => `- ${record.date}, ${record.kilometers}km: ${record.description}`).join('\n');
-
-    return `Prepara checklist pre-viaggio per ${motorcycle.model} (${motorcycle.year}, ${motorcycle.kilometers}km).
-Viaggio: "${itinerary.tripTitle}", circa ${Math.round(totalTripKm)} km.
-Storico Manutenzione:
-${maintenanceHistoryString}
-Considera km attuali e km del viaggio. Rispondi esclusivamente in JSON.`;
-};
-
-const buildTripDiarySummaryPrompt = (itinerary: Itinerary, entries: DiaryEntry[]): string => {
-    const diaryContent = entries.map(e => `Giorno ${e.day}: "${e.content}"`).join('\n');
-    return `Scrivi un diario narrativo per il viaggio "${itinerary.tripTitle}".
-Note dell'utente:
-${diaryContent}
-Usa uno stile coinvolgente in prima persona. Formattazione Markdown.`;
-};
-
-
-// --- SERVICE FUNCTIONS ---
-
-const fileToGenerativePart = async (file: File): Promise<Part> => {
-  const base64EncodedDataPromise = new Promise<string>((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-    reader.readAsDataURL(file);
-  });
-  return {
-    inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
-  };
-};
-
-export const generateItinerary = async (options: ItineraryOptions): Promise<Itinerary> => {
-    const prompt = buildItineraryPrompt(options);
     const config = {
         responseMimeType: "application/json",
         responseSchema: ITINERARY_SCHEMA,
-        thinkingConfig: { thinkingBudget: 16000 } // Expert planning reasoning
+        thinkingConfig: { thinkingBudget: 16000 }
     };
-    const apiResponse = await apiProxy('gemini-3-pro-preview', { parts: [{ text: prompt }] }, config);
-    return mapApiItineraryToAppItinerary(apiResponse);
+    const response = await apiProxy('gemini-3-pro-preview', { parts: [{ text: prompt }] }, config);
+    return mapApiItineraryToAppItinerary(response);
 };
 
-export const diagnoseProblem = async (
-  problemDescription: string,
-  motorcycle: GarageVehicle,
-  image?: File
-): Promise<string> => {
-    const prompt = buildDiagnosisPrompt(problemDescription, motorcycle);
-    const parts: Part[] = [{ text: prompt }];
+export const diagnoseProblem = async (problemDescription: string, motorcycle: GarageVehicle, image?: File): Promise<string> => {
+    const prompt = `Sei il Capo Meccanico MotoMentor. Diagnostica: ${motorcycle.model} (${motorcycle.year}), ${motorcycle.kilometers}km.
+Problema: "${problemDescription}".
+Analizza tecnicamente: circuiti, componenti e usura. Sii rigoroso e professionale.`;
+    
+    const parts: any[] = [{ text: prompt }];
     if (image) {
-        const imagePart = await fileToGenerativePart(image);
-        parts.push(imagePart);
+        const base64Data = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+            reader.readAsDataURL(image);
+        });
+        parts.push({ inlineData: { data: base64Data, mimeType: image.type } });
     }
-    const config = {
-        thinkingConfig: { thinkingBudget: 16000 } // Deep mechanical diagnosis
-    };
-    return await textApiProxy('gemini-3-pro-preview', { parts }, config);
+    return await textApiProxy('gemini-3-pro-preview', { parts }, { 
+        thinkingConfig: { thinkingBudget: 24576 }
+    });
 };
 
-export const getMaintenanceTips = async (
-    motorcycle: GarageVehicle,
-    itinerary: Itinerary,
-    maintenanceLog: MaintenanceRecord[]
-): Promise<MaintenanceTips> => {
-    const prompt = buildMaintenanceTipsPrompt(motorcycle, itinerary, maintenanceLog);
-    const config = {
-        responseMimeType: "application/json",
-        responseSchema: MAINTENANCE_TIPS_SCHEMA,
+export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: GarageVehicle): Promise<MaintenanceTips> => {
+    const prompt = `Capo Officina MotoMentor: Checklist pre-partenza per "${itinerary.tripTitle}" con ${motorcycle.model}.
+Considera il chilometraggio previsto e il tipo di viaggio.`;
+    const config = { responseMimeType: "application/json", responseSchema: MAINTENANCE_TIPS_SCHEMA };
+    const response = await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
+    return {
+        essentialChecks: response.controlli_essenziali || [],
+        tripSpecificTips: response.suggerimenti_specifici_viaggio || [],
+        emergencyEquipment: response.equipaggiamento_emergenza || [],
     };
-    const apiResponse = await apiProxy('gemini-3-pro-preview', { parts: [{ text: prompt }] }, config);
-    return mapApiMaintenanceTipsToApp(apiResponse);
 };
 
 export const generateTripDiarySummary = async (itinerary: Itinerary, entries: DiaryEntry[]): Promise<string> => {
-    const prompt = buildTripDiarySummaryPrompt(itinerary, entries);
+    const diaryContent = entries.map(e => `Giorno ${e.day}: "${e.content}"`).join('\n');
+    const prompt = `Racconta il viaggio "${itinerary.tripTitle}" come un'epica avventura motociclistica basandoti su: ${diaryContent}.`;
     return await textApiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] });
 };
 
 export const getVehicleSpecs = async (model: string, year: string) => {
-    const prompt = `Fornisci dati tecnici per ${model} (${year}): cilindrata, potenza, pneumatici.`;
-    const config = {
-        responseMimeType: "application/json",
-        responseSchema: VEHICLE_SPECS_SCHEMA,
-    };
-    const apiResponse = await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
-    return mapApiSpecsToApp(apiResponse);
+    const prompt = `Specifiche tecniche ufficiali per ${model} (${year}).`;
+    const config = { responseMimeType: "application/json", responseSchema: VEHICLE_SPECS_SCHEMA };
+    return await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
 };
 
 export const createChatSession = (vehicle: GarageVehicle | null): Chat => {
-    const systemInstruction = `Sei MotoMentor, esperto meccanico e motoviaggiatore. ${vehicle ? `Parli con il proprietario di una ${vehicle.model} (${vehicle.year}).` : ''} Rispondi in modo competente e cordiale.`;
+    const ai = getAi();
+    const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. Unisci la competenza di un ingegnere meccanico e l'anima di un viaggiatore solitario. 
+Parla in modo diretto, tecnico ma coinvolgente. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
 
-    const chat: Chat = getAi().chats.create({
+    return ai.chats.create({
         model: 'gemini-3-flash-preview',
-        config: {
-            systemInstruction: systemInstruction,
-        },
+        config: { systemInstruction },
     });
-    return chat;
 };

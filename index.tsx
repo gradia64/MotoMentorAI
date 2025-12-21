@@ -14,15 +14,14 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
-// Fix: Explicitly using React.Component and initializing state as a class property ensures that properties like 'state' and 'props' are correctly inferred and available on the class instance.
+// Fix: Explicitly using React.Component ensures that 'props' and 'state' properties are correctly inherited and typed, resolving the error where 'props' was not found on the ErrorBoundary instance.
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = {
-    hasError: false,
-    error: undefined,
-  };
-
   constructor(props: ErrorBoundaryProps) {
     super(props);
+    this.state = {
+      hasError: false,
+      error: undefined,
+    };
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -35,8 +34,8 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     console.error("Uncaught error:", error, errorInfo);
   }
 
-  render() {
-    // Fix: Accessing state which is now correctly defined on the React.Component instance.
+  render(): ReactNode {
+    // Accessing state which is now correctly inferred from the base React.Component class.
     if (this.state.hasError) {
       // Custom fallback UI
       return (
@@ -60,7 +59,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       );
     }
 
-    // Fix: Accessing props which is now correctly defined on the React.Component instance.
+    // Accessing props which is now correctly inferred from the base React.Component class.
     return this.props.children;
   }
 }
