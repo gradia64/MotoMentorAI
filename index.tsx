@@ -1,4 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+
+import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
@@ -13,14 +14,15 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
-// Fix: Explicitly extending Component from named import ensures types are correctly inferred.
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fix: Explicitly using React.Component and initializing state as a class property ensures that properties like 'state' and 'props' are correctly inferred and available on the class instance.
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = {
+    hasError: false,
+    error: undefined,
+  };
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: undefined,
-    };
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -34,6 +36,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   render() {
+    // Fix: Accessing state which is now correctly defined on the React.Component instance.
     if (this.state.hasError) {
       // Custom fallback UI
       return (
@@ -57,6 +60,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       );
     }
 
+    // Fix: Accessing props which is now correctly defined on the React.Component instance.
     return this.props.children;
   }
 }
