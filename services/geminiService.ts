@@ -11,7 +11,6 @@ const ensureApiKey = async () => {
         const hasKey = await window.aistudio.hasSelectedApiKey();
         if (!hasKey) {
             await window.aistudio.openSelectKey();
-            // Dopo l'apertura assumiamo successo come da linee guida
         }
     }
 };
@@ -25,10 +24,8 @@ const getAi = () => {
 // Pulisce la stringa rimuovendo markdown e testo superfluo prima e dopo il JSON
 const cleanJsonString = (text: string): string => {
     let cleaned = text.trim();
-    // Rimuove blocchi markdown ```json ... ``` o ``` ... ```
     cleaned = cleaned.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "");
     
-    // Se c'è ancora del testo prima del primo { o [, lo rimuoviamo
     const firstBrace = cleaned.indexOf('{');
     const firstBracket = cleaned.indexOf('[');
     let start = -1;
@@ -37,7 +34,6 @@ const cleanJsonString = (text: string): string => {
 
     if (start > 0) cleaned = cleaned.substring(start);
 
-    // Se c'è del testo dopo l'ultimo } o ], lo rimuoviamo
     const lastBrace = cleaned.lastIndexOf('}');
     const lastBracket = cleaned.lastIndexOf(']');
     const end = Math.max(lastBrace, lastBracket);
@@ -56,11 +52,23 @@ const apiProxy = async (model: string, contents: any, config: any) => {
         if (!cleanedText) throw new Error("L'IA ha restituito una risposta vuota.");
         return JSON.parse(cleanedText);
     } catch (e: any) {
-        console.error("Gemini API Error:", e);
+        console.error(`Gemini API Error (${model}):`, e);
+
+        // Se l'errore è 429 (Quota esaurita) e stiamo usando il Pro, tentiamo il fallback sul Flash
+        if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3-pro-preview') {
+            console.warn("Quota Pro esaurita, tentativo di fallback su Gemini 3 Flash...");
+            return await apiProxy('gemini-3-flash-preview', contents, config);
+        }
+
         if (e.message?.includes("Requested entity was not found")) {
             if (window.aistudio) await window.aistudio.openSelectKey();
-            throw new Error("Progetto API non trovato o non fatturato. Seleziona una chiave da un progetto con billing attivo.");
+            throw new Error("Progetto API non trovato. Seleziona una chiave da un progetto con billing attivo.");
         }
+        
+        if (e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) {
+            throw new Error("Limite di richieste raggiunto. Attendi un minuto o seleziona una chiave API 'Paid' se disponibile.");
+        }
+
         throw e;
     }
 };
@@ -72,7 +80,10 @@ const textApiProxy = async (model: string, contents: any, config?: any) => {
          const response = await ai.models.generateContent({ model, contents, config });
          return response.text || "Nessuna risposta generata.";
     } catch (e: any) {
-         console.error("Gemini Text API Error:", e);
+         console.error(`Gemini Text API Error (${model}):`, e);
+         if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3-pro-preview') {
+            return await textApiProxy('gemini-3-flash-preview', contents, config);
+         }
          throw e;
     }
 };
@@ -112,14 +123,14 @@ ${motorcycle ? `Veicolo: ${motorcycle.model} (${motorcycle.year}).` : ''}
 FILOSOFIA: Massima precisione geografica, strade panoramiche, tappe bilanciate.
 Richieste: ${customPrompt || 'Nessuna'}.
 
-REGOLE JSON: Restituisci esclusivamente l'oggetto JSON richiesto. Non aggiungere testo prima o dopo.`;
+REGOLE JSON: Restituisci esclusivamente l'oggetto JSON richiesto secondo ITINERARY_SCHEMA.`;
 
     const config = {
         responseMimeType: "application/json",
         responseSchema: ITINERARY_SCHEMA,
-        // Rimosso thinkingBudget per migliorare la stabilità del parsing JSON
     };
     
+    // Tenta prima con il modello Pro, apiProxy gestirà il fallback a Flash in caso di errore 429
     const response = await apiProxy('gemini-3-pro-preview', { parts: [{ text: prompt }] }, config);
     return mapApiItineraryToAppItinerary(response);
 };
