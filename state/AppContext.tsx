@@ -4,7 +4,6 @@ import { Chat, Content } from '@google/genai';
 import { generateItinerary, diagnoseProblem, getMaintenanceTips, createChatSession, getVehicleSpecs, generateTripDiarySummary } from '../services/geminiService';
 import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, SavedTrip, MaintenanceRecord, MaintenanceReminder, SavedDiagnosis, DiaryEntry } from '../types';
 import { useLocalStorage } from '../utils/hooks';
-import { generatePdf } from '../utils/pdf';
 
 interface Notification {
     message: string;
@@ -20,7 +19,7 @@ export interface ChatHistoryItem {
 interface DeadlineAlert {
     vehicleId: string;
     vehicleName: string;
-    type: 'Assicurazione' | 'Bollo' | 'Revisione';
+      type: 'Assicurazione' | 'Bollo' | 'Revisione';
     date: string;
     status: 'expired' | 'warning';
     daysRemaining: number;
@@ -208,8 +207,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const newHistory = [...updatedHistory, { role: 'model', parts: [{ text: fullText }] }];
                 dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: newHistory } });
             }
-        } catch (err) {
-            showNotification("Errore di comunicazione.", "error");
+        } catch (err: any) {
+            showNotification(err.message || "Errore di comunicazione.", "error");
         } finally {
             dispatch({ type: 'SET_CHAT_LOADING', payload: false });
         }
@@ -218,12 +217,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const handleTripSubmit = useCallback(async (e: FormEvent) => {
         e.preventDefault();
         dispatch({ type: 'SET_ITINERARY_GENERATING', payload: true });
+        dispatch({ type: 'SET_DATA', payload: { key: 'error', value: null } });
         try {
             const itinerary = await generateItinerary({ ...state.drafts.tripPlanner, motorcycle: state.activeVehicle });
             dispatch({ type: 'SET_ITINERARY', payload: { itinerary, tripId: null } });
             showNotification("Itinerario calcolato!");
-        } catch (err) {
-            showNotification("Errore calcolo viaggio.", "error");
+        } catch (err: any) {
+            console.error("Trip Generation Error:", err);
+            const errorMsg = err.message || "Errore sconosciuto nel calcolo del viaggio.";
+            showNotification(errorMsg, "error");
+            dispatch({ type: 'SET_DATA', payload: { key: 'error', value: errorMsg } });
         } finally {
             dispatch({ type: 'SET_ITINERARY_GENERATING', payload: false });
         }
@@ -265,8 +268,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const summary = await generateTripDiarySummary(trip.itinerary, trip.diaryEntries);
             handleUpdateTrip({ ...trip, diarySummary: summary });
             showNotification("Racconto generato!");
-        } catch (e) {
-            showNotification("Errore generazione racconto.", "error");
+        } catch (e: any) {
+            showNotification(e.message || "Errore generazione racconto.", "error");
         } finally {
             dispatch({ type: 'SET_DIARY_SUMMARY_GENERATING', payload: false });
         }
