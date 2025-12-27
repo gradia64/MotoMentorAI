@@ -1,9 +1,11 @@
 
 import React, { createContext, useReducer, useContext, useEffect, ReactNode, useCallback, FormEvent } from 'react';
-import { Chat, Content } from '@google/genai';
+import { Chat, Content, GenerateContentResponse } from '@google/genai';
 import { generateItinerary, diagnoseProblem, getMaintenanceTips, createChatSession, getVehicleSpecs, generateTripDiarySummary } from '../services/geminiService';
-import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, SavedTrip, MaintenanceRecord, MaintenanceReminder, SavedDiagnosis, DiaryEntry } from '../types';
+import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, SavedTrip, MaintenanceRecord, MaintenanceReminder, SavedDiagnosis, DiaryEntry, MaintenanceType } from '../types';
 import { useLocalStorage } from '../utils/hooks';
+import { generatePdf } from '../utils/pdf';
+import { downloadFile } from '../utils/mapsHelpers';
 
 interface Notification {
     message: string;
@@ -19,13 +21,13 @@ export interface ChatHistoryItem {
 interface DeadlineAlert {
     vehicleId: string;
     vehicleName: string;
-      type: 'Assicurazione' | 'Bollo' | 'Revisione';
+    type: 'Assicurazione' | 'Bollo' | 'Revisione';
     date: string;
     status: 'expired' | 'warning';
     daysRemaining: number;
 }
 
-interface AppState {
+export interface AppState {
     mode: AiMode;
     isLoadingData: boolean;
     isGeneratingItinerary: boolean;
@@ -76,7 +78,7 @@ interface AppState {
     mechanicMode: 'diagnose' | 'maintenance' | 'workshop';
 }
 
-type AppAction =
+export type AppAction =
     | { type: 'SET_MODE'; payload: AiMode }
     | { type: 'SET_DATA'; payload: { key: keyof AppState, value: any } }
     | { type: 'SET_NOTIFICATION'; payload: Notification | null }
@@ -175,9 +177,14 @@ const AppContext = createContext<any>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
+    
+    // Persistent Storage
     const [garage, setGarage] = useLocalStorage<GarageVehicle[]>('motomentor_garage', []);
     const [activeVehId, setActiveVehId] = useLocalStorage<string | null>('motomentor_active_veh', null);
     const [trips, setTrips] = useLocalStorage<SavedTrip[]>('motomentor_trips', []);
+    const [diagnoses, setDiagnoses] = useLocalStorage<SavedDiagnosis[]>('motomentor_diagnoses', []);
+    const [mLog, setMLog] = useLocalStorage<MaintenanceRecord[]>('motomentor_mlog', []);
+    const [mReminders, setMReminders] = useLocalStorage<MaintenanceReminder[]>('motomentor_reminders', []);
 
     useEffect(() => {
         dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: garage } });
@@ -185,35 +192,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         dispatch({ type: 'SET_DATA', payload: { key: 'activeVehicle', value: active } });
     }, [garage, activeVehId]);
 
-    useEffect(() => {
-        dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: trips } });
-    }, [trips]);
+    useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: trips } }); }, [trips]);
+    useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: diagnoses } }); }, [diagnoses]);
+    useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: mLog } }); }, [mLog]);
+    useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: mReminders } }); }, [mReminders]);
 
     const showNotification = useCallback((message: string, type: 'success' | 'error' | 'warning' = 'success') => {
         dispatch({ type: 'SET_NOTIFICATION', payload: { message, type } });
     }, []);
 
-    const handleSendMessage = useCallback(async (message: string) => {
-        if (!state.chatSession || state.isChatLoading) return;
-        const userMsg = { role: 'user', parts: [{ text: message }] };
-        const updatedHistory = [...state.chatHistory, userMsg];
-        dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: updatedHistory } });
-        dispatch({ type: 'SET_CHAT_LOADING', payload: true });
-        try {
-            const stream = await state.chatSession.sendMessageStream({ message });
-            let fullText = "";
-            for await (const chunk of stream) {
-                fullText += chunk.text;
-                const newHistory = [...updatedHistory, { role: 'model', parts: [{ text: fullText }] }];
-                dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: newHistory } });
-            }
-        } catch (err: any) {
-            showNotification(err.message || "Errore di comunicazione.", "error");
-        } finally {
-            dispatch({ type: 'SET_CHAT_LOADING', payload: false });
-        }
-    }, [state.chatSession, state.chatHistory, state.isChatLoading, showNotification]);
+    // --- Garage Handlers ---
+    const handleAddVehicle = (v: any) => {
+        const newVeh = { ...v, id: crypto.randomUUID() };
+        setGarage([...garage, newVeh]);
+        showNotification("Moto aggiunta al garage!");
+    };
 
+    const handleUpdateVehicle = (updated: GarageVehicle) => {
+        setGarage(garage.map(v => v.id === updated.id ? updated : v));
+        showNotification("Dati veicolo aggiornati.");
+    };
+
+    const handleDeleteVehicle = (id: string) => {
+        setGarage(garage.filter(v => v.id !== id));
+        if (activeVehId === id) setActiveVehId(null);
+        showNotification("Veicolo rimosso.");
+    };
+
+    const handleSetActiveVehicle = (id: string) => {
+        setActiveVehId(id);
+        showNotification("Moto selezionata come attiva!");
+    };
+
+    const handleGenerateSpecs = async (model: string, year: string) => {
+        try {
+            return await getVehicleSpecs(model, year);
+        } catch (e: any) {
+            showNotification("Errore ricerca specifiche: " + e.message, "error");
+            return null;
+        }
+    };
+
+    // --- Planner Handlers ---
     const handleTripSubmit = useCallback(async (e: FormEvent) => {
         e.preventDefault();
         dispatch({ type: 'SET_ITINERARY_GENERATING', payload: true });
@@ -223,37 +243,184 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             dispatch({ type: 'SET_ITINERARY', payload: { itinerary, tripId: null } });
             showNotification("Itinerario calcolato!");
         } catch (err: any) {
-            console.error("Trip Generation Error:", err);
-            const errorMsg = err.message || "Errore sconosciuto nel calcolo del viaggio.";
-            showNotification(errorMsg, "error");
-            dispatch({ type: 'SET_DATA', payload: { key: 'error', value: errorMsg } });
+            showNotification(err.message || "Errore calcolo viaggio.", "error");
+            dispatch({ type: 'SET_DATA', payload: { key: 'error', value: err.message } });
         } finally {
             dispatch({ type: 'SET_ITINERARY_GENERATING', payload: false });
         }
     }, [state.drafts.tripPlanner, state.activeVehicle, showNotification]);
-
-    const handleAddVehicle = (v: any) => {
-        const newVeh = { ...v, id: crypto.randomUUID() };
-        setGarage([...garage, newVeh]);
-        showNotification("Moto aggiunta al garage!");
-    };
-
-    const handleSetActiveVehicle = (id: string) => {
-        setActiveVehId(id);
-        showNotification("Moto selezionata!");
-    };
 
     const saveItinerary = () => {
         if (!state.itinerary) return;
         const newTrip: SavedTrip = {
             id: crypto.randomUUID(),
             inputs: state.drafts.tripPlanner,
-            itinerary: state.itinerary
+            itinerary: state.itinerary,
+            diaryEntries: []
         };
-        setTrips([...trips, newTrip]);
+        setTrips([newTrip, ...trips]);
         showNotification("Viaggio salvato nello storico.");
     };
 
+    const handleSaveAndReset = () => {
+        saveItinerary();
+        dispatch({ type: 'RESET_TRIP_PLANNER_FORM' });
+        showNotification("Viaggio salvato e modulo resettato!");
+    };
+
+    const loadLastItinerary = () => {
+        if (trips.length > 0) {
+            const last = trips[0];
+            dispatch({ type: 'SET_ITINERARY', payload: { itinerary: last.itinerary, tripId: last.id } });
+            dispatch({ type: 'UPDATE_TRIP_DRAFT', payload: last.inputs });
+            showNotification("Caricato ultimo viaggio salvato.");
+        }
+    };
+
+    const loadTripFromHistory = (id: string) => {
+        const trip = trips.find(t => t.id === id);
+        if (trip) {
+            dispatch({ type: 'SET_ITINERARY', payload: { itinerary: trip.itinerary, tripId: trip.id } });
+            dispatch({ type: 'UPDATE_TRIP_DRAFT', payload: trip.inputs });
+        }
+    };
+
+    const deleteTripFromHistory = (id: string) => {
+        setTrips(trips.filter(t => t.id !== id));
+        showNotification("Viaggio eliminato.");
+    };
+
+    const exportTripHistory = () => {
+        const data = JSON.stringify(trips, null, 2);
+        downloadFile(data, 'motomentor_viaggi.json', 'application/json');
+    };
+
+    const importTripHistory = async (file: File) => {
+        const text = await file.text();
+        try {
+            const imported = JSON.parse(text);
+            setTrips([...imported, ...trips]);
+            showNotification("Storico importato!");
+        } catch (e) {
+            showNotification("Errore importazione file.", "error");
+        }
+    };
+
+    // --- Mechanic Handlers ---
+    const handleMechanicSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        if (state.mechanicMode === 'diagnose') {
+            dispatch({ type: 'SET_DIAGNOSIS_GENERATING', payload: true });
+            try {
+                const res = await diagnoseProblem(state.drafts.virtualMechanic.problemDescription, state.activeVehicle!, state.drafts.virtualMechanic.problemImage!);
+                dispatch({ type: 'SET_DIAGNOSIS', payload: { diagnosis: res, diagnosisId: null } });
+            } catch (e: any) {
+                showNotification(e.message, "error");
+            } finally {
+                dispatch({ type: 'SET_DIAGNOSIS_GENERATING', payload: false });
+            }
+        } else {
+            dispatch({ type: 'SET_CHECKLIST_GENERATING', payload: true });
+            try {
+                const lastTrip = state.itinerary ? { tripTitle: state.itinerary.tripTitle, dailySchedule: state.itinerary.dailySchedule } as any : (trips.length > 0 ? trips[0].itinerary : null);
+                if (!lastTrip) throw new Error("Devi avere almeno un viaggio pianificato o salvato.");
+                const tips = await getMaintenanceTips(lastTrip, state.activeVehicle!);
+                dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceTips', value: tips } });
+            } catch (e: any) {
+                showNotification(e.message, "error");
+            } finally {
+                dispatch({ type: 'SET_CHECKLIST_GENERATING', payload: false });
+            }
+        }
+    };
+
+    const handleAddMaintenanceRecord = (record: Omit<MaintenanceRecord, 'id'>) => {
+        setMLog([{ ...record, id: crypto.randomUUID() }, ...mLog]);
+        showNotification("Intervento registrato.");
+    };
+
+    const handleDeleteMaintenanceRecord = (id: string) => {
+        setMLog(mLog.filter(l => l.id !== id));
+    };
+
+    const handleAddReminder = (r: Omit<MaintenanceReminder, 'id'>) => {
+        setMReminders([...mReminders, { ...r, id: crypto.randomUUID() }]);
+    };
+
+    const handleDeleteReminder = (id: string) => {
+        setMReminders(mReminders.filter(r => r.id !== id));
+    };
+
+    const handleSaveOrUpdateDiagnosis = () => {
+        if (!state.diagnosis) return;
+        const diag: SavedDiagnosis = {
+            id: state.activeDiagnosisId || crypto.randomUUID(),
+            vehicleId: state.activeVehicle!.id,
+            date: new Date().toISOString(),
+            problemDescription: state.drafts.virtualMechanic.problemDescription,
+            diagnosisText: state.diagnosis
+        };
+        if (state.activeDiagnosisId) {
+            setDiagnoses(diagnoses.map(d => d.id === diag.id ? diag : d));
+        } else {
+            setDiagnoses([diag, ...diagnoses]);
+        }
+        showNotification("Diagnosi salvata.");
+    };
+
+    const handleLoadDiagnosis = (id: string) => {
+        const d = diagnoses.find(x => x.id === id);
+        if (d) {
+            dispatch({ type: 'SET_DIAGNOSIS', payload: { diagnosis: d.diagnosisText, diagnosisId: d.id } });
+            dispatch({ type: 'UPDATE_MECHANIC_DRAFT', payload: { problemDescription: d.problemDescription } });
+        }
+    };
+
+    const handleDeleteDiagnosis = (id: string) => {
+        setDiagnoses(diagnoses.filter(d => d.id !== id));
+    };
+
+    // --- Chat Handlers ---
+    const handleSendMessage = useCallback(async (message: string) => {
+        if (state.isChatLoading) return;
+        
+        let session = state.chatSession;
+        if (!session) {
+            session = createChatSession(state.activeVehicle);
+            dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: session } });
+        }
+
+        const userMsg = { role: 'user', parts: [{ text: message }] };
+        const updatedHistory = [...state.chatHistory, userMsg];
+        dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: updatedHistory } });
+        dispatch({ type: 'SET_CHAT_LOADING', payload: true });
+        
+        try {
+            const streamResponse = await session.sendMessageStream({ message });
+            let fullText = "";
+            for await (const chunk of streamResponse) {
+                const c = chunk as GenerateContentResponse;
+                fullText += c.text;
+                const newHistory = [...updatedHistory, { role: 'model', parts: [{ text: fullText }] }];
+                dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: newHistory } });
+            }
+        } catch (err: any) {
+            showNotification(err.message || "Errore chat.", "error");
+        } finally {
+            dispatch({ type: 'SET_CHAT_LOADING', payload: false });
+        }
+    }, [state.chatSession, state.chatHistory, state.isChatLoading, state.activeVehicle, showNotification]);
+
+    const handleClearActiveChat = () => {
+        dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: [] } });
+        dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: null } });
+    };
+
+    const handleLoadChatHistory = (key: string) => {
+        // Funzionalità non implementata
+    };
+
+    // --- Diary Handlers ---
     const handleUpdateTrip = (updatedTrip: SavedTrip) => {
         setTrips(trips.map(t => t.id === updatedTrip.id ? updatedTrip : t));
     };
@@ -275,12 +442,122 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
 
+    // --- PDF Exports (Async Handlers) ---
+    const handleDownloadPdf = async () => {
+        const currentItinerary = state.itinerary;
+        if (!currentItinerary) return;
+        
+        dispatch({ type: 'SET_PDF_GENERATING', payload: true });
+        
+        // Usiamo un piccolo timeout per permettere al browser di renderizzare lo stato "loading"
+        setTimeout(() => {
+            try {
+                generatePdf(
+                    `Itinerario_${currentItinerary.tripTitle.replace(/\s/g, '_')}.pdf`,
+                    currentItinerary.tripTitle,
+                    ({ addWrappedText, addSeparator }) => {
+                        addWrappedText(currentItinerary.generalDescription, { size: 12, marginBottom: 5 });
+                        currentItinerary.dailySchedule.forEach(day => {
+                            addSeparator();
+                            addWrappedText(`GIORNO ${day.day}: ${day.stageTitle}`, { size: 14, color: [37, 99, 235], marginBottom: 3 });
+                            addWrappedText(`${day.stageKilometers} km - ${day.weatherForecast.conditions}`, { size: 10, marginBottom: 2 });
+                            addWrappedText(day.routeDescription);
+                            addWrappedText("ATTIVITÀ:", { size: 10, color: [100], marginBottom: 1 });
+                            day.activities.forEach(a => addWrappedText(`• ${a}`, { isListItem: true, size: 9 }));
+                        });
+                    }
+                );
+            } catch (e: any) {
+                showNotification(e.message, "error");
+            } finally {
+                dispatch({ type: 'SET_PDF_GENERATING', payload: false });
+            }
+        }, 100);
+    };
+
+    const handleDownloadDiagnosisPdf = async () => {
+        const currentDiagnosis = state.diagnosis;
+        if (!currentDiagnosis) return;
+        
+        dispatch({ type: 'SET_DIAGNOSIS_PDF_GENERATING', payload: true });
+        
+        setTimeout(() => {
+            try {
+                generatePdf(`Diagnosi_${state.activeVehicle?.model || 'Moto'}.pdf`, "Report Diagnosi Meccanica", ({ addWrappedText }) => {
+                    addWrappedText(`Veicolo: ${state.activeVehicle?.model || 'N/D'} (${state.activeVehicle?.year || 'N/D'})`);
+                    addWrappedText(`Problema Segnalato: ${state.drafts.virtualMechanic.problemDescription}`, { marginBottom: 5 });
+                    addWrappedText("ANALISI IA:", { size: 14, color: [37, 99, 235] });
+                    addWrappedText(currentDiagnosis);
+                });
+            } catch (e: any) {
+                showNotification(e.message, "error");
+            } finally {
+                dispatch({ type: 'SET_DIAGNOSIS_PDF_GENERATING', payload: false });
+            }
+        }, 100);
+    };
+
+    const handleDownloadChecklistPdf = async () => {
+        const tips = state.maintenanceTips;
+        if (!tips) return;
+        
+        dispatch({ type: 'SET_CHECKLIST_PDF_GENERATING', payload: true });
+        
+        setTimeout(() => {
+            try {
+                generatePdf("Checklist_Manutenzione.pdf", "Checklist Pre-Viaggio", ({ addWrappedText, addSeparator }) => {
+                    addWrappedText("CONTROLLI ESSENZIALI:", { size: 14, color: [37, 99, 235] });
+                    tips.essentialChecks.forEach(c => addWrappedText(`[ ] ${c}`, { isListItem: true }));
+                    addSeparator();
+                    addWrappedText("EQUIPAGGIAMENTO EMERGENZA:", { size: 14, color: [37, 99, 235] });
+                    tips.emergencyEquipment.forEach(c => addWrappedText(`[ ] ${c}`, { isListItem: true }));
+                });
+            } catch (e: any) {
+                showNotification(e.message, "error");
+            } finally {
+                dispatch({ type: 'SET_CHECKLIST_PDF_GENERATING', payload: false });
+            }
+        }, 100);
+    };
+
+    const handleDownloadDiaryPdf = async (trip: SavedTrip) => {
+        dispatch({ type: 'SET_PDF_GENERATING', payload: true });
+        
+        setTimeout(() => {
+            try {
+                generatePdf(`Diario_${trip.itinerary.tripTitle.replace(/\s/g, '_')}.pdf`, trip.itinerary.tripTitle, ({ addWrappedText, addSeparator }) => {
+                    if (trip.diarySummary) {
+                        addWrappedText("IL RACCONTO DEL VIAGGIO:", { size: 14, color: [147, 51, 234] });
+                        addWrappedText(trip.diarySummary, { marginBottom: 10 });
+                    }
+                    trip.itinerary.dailySchedule.forEach(day => {
+                        const note = trip.diaryEntries?.find(e => e.day === day.day);
+                        if (note) {
+                            addSeparator();
+                            addWrappedText(`GIORNO ${day.day}: ${day.stageTitle}`, { size: 12, color: [37, 99, 235] });
+                            addWrappedText(note.content);
+                        }
+                    });
+                });
+            } catch (e: any) {
+                showNotification(e.message, "error");
+            } finally {
+                dispatch({ type: 'SET_PDF_GENERATING', payload: false });
+            }
+        }, 100);
+    };
+
     return (
         <AppContext.Provider value={{ 
             state, dispatch, 
-            handleTripSubmit, handleSendMessage, handleAddVehicle, 
-            handleSetActiveVehicle, saveItinerary, handleUpdateTrip,
-            handleGenerateDiarySummary 
+            handleTripSubmit, handleSendMessage, handleAddVehicle, handleUpdateVehicle, handleDeleteVehicle,
+            handleSetActiveVehicle, saveItinerary, handleSaveAndReset, loadLastItinerary, loadTripFromHistory,
+            deleteTripFromHistory, exportTripHistory, importTripHistory, handleDownloadPdf,
+            handleMechanicSubmit, handleAddMaintenanceRecord, handleDeleteMaintenanceRecord, handleAddReminder,
+            handleDeleteReminder, handleSaveOrUpdateDiagnosis, handleLoadDiagnosis, handleDeleteDiagnosis,
+            handleDownloadDiagnosisPdf, handleDownloadChecklistPdf, handleGenerateSpecs,
+            handleUpdateTrip, handleGenerateDiarySummary, handleDownloadDiaryPdf,
+            handleClearActiveChat, handleLoadChatHistory
         }}>
             {children}
         </AppContext.Provider>

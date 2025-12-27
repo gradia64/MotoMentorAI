@@ -1,5 +1,5 @@
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
@@ -14,16 +14,22 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
-// Fix: Explicitly extending Component with ErrorBoundaryProps and ErrorBoundaryState 
-// generics ensures that TypeScript correctly identifies 'props' and 'state' as inherited properties 
-// from React's base Component class, resolving the errors where they were reported as missing.
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fix: Use React.Component explicitly and property initialization for state and props to resolve TS errors
+// where 'state' and 'props' were reported as missing from ErrorBoundary.
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Explicitly declare state and props to resolve inference issues in this environment.
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: undefined,
+  };
+
+  // Fix for: Property 'props' does not exist on type 'ErrorBoundary'
+  public props: ErrorBoundaryProps;
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: undefined,
-    };
+    // Explicitly initialize props on the instance to ensure visibility to the TS compiler
+    this.props = props;
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -37,7 +43,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   render(): ReactNode {
-    // Accessing state which is now correctly inferred from the base Component class.
+    // Accessing state which is now correctly declared on the class.
     if (this.state.hasError) {
       // Custom fallback UI
       return (
@@ -61,7 +67,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       );
     }
 
-    // Accessing props which is now correctly inferred from the base Component class.
+    // Accessing props which is now correctly declared on the class.
     return this.props.children;
   }
 }
