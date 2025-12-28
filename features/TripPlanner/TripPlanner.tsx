@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { Day, GpxPoint } from '../../types';
-import { ArchiveBoxIcon, GlobeAltIcon, ArrowDownOnSquareIcon, BookOpenIcon, ClockIcon, BellAlertIcon, ShieldCheckIcon, BuildingStorefrontIcon, HomeIcon, ArrowDownTrayIcon, DocumentPlusIcon, MapIcon, QueueListIcon, ArrowsRightLeftIcon } from '@heroicons/react/24/outline';
+import { ArchiveBoxIcon, GlobeAltIcon, ArrowDownOnSquareIcon, BookOpenIcon, ClockIcon, BellAlertIcon, ShieldCheckIcon, BuildingStorefrontIcon, HomeIcon, ArrowDownTrayIcon, DocumentPlusIcon, MapIcon, QueueListIcon, ArrowsRightLeftIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
@@ -14,7 +15,6 @@ import SegmentNavigator from './SegmentNavigator';
 import Tooltip from '../../components/Tooltip';
 
 // --- CONSTANTS ---
-// Moved outside the component to prevent re-creation on every render.
 const TOURS = [
     "Tour della Scozia", 
     "Avventura in Marocco", 
@@ -70,7 +70,6 @@ const TripMapOptionsModal: React.FC<{
                     </div>
                 </div>
                 <div className="p-6 pt-0 space-y-3">
-                    {/* Option 1: Quick Overview */}
                     <button onClick={onQuickView} className="w-full text-left p-4 rounded-lg bg-gray-700 hover:bg-gray-600 transition-colors flex items-center gap-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-800">
                         <MapIcon className="w-6 h-6 text-cyan-400 flex-shrink-0" />
                         <div>
@@ -78,7 +77,6 @@ const TripMapOptionsModal: React.FC<{
                             <p className="text-sm text-gray-400">Apri una singola mappa Google con le tappe principali del viaggio.</p>
                         </div>
                     </button>
-                    {/* Option 2: Detailed Navigation */}
                     <button onClick={onDetailedNav} className="w-full text-left p-4 rounded-lg bg-gray-700 hover:bg-gray-600 transition-colors flex items-center gap-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-800">
                          <QueueListIcon className="w-6 h-6 text-indigo-400 flex-shrink-0" />
                         <div>
@@ -86,7 +84,6 @@ const TripMapOptionsModal: React.FC<{
                             <p className="text-sm text-gray-400">Apri il percorso diviso in segmenti per la navigazione web.</p>
                         </div>
                     </button>
-                    {/* Option 3: Download GPX */}
                     <button onClick={onDownloadGpx} className="w-full text-left p-4 rounded-lg bg-gray-700 hover:bg-gray-600 transition-colors flex items-center gap-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-800">
                         <ArrowDownTrayIcon className="w-6 h-6 text-teal-400 flex-shrink-0" />
                         <div>
@@ -117,6 +114,7 @@ const TripPlanner: React.FC = () => {
         handleTripSubmit,
         saveItinerary,
         handleSaveAndReset,
+        handleResetForm,
         loadLastItinerary,
         handleDownloadPdf,
         loadTripFromHistory,
@@ -128,7 +126,7 @@ const TripPlanner: React.FC = () => {
     const {
         drafts,
         itinerary,
-        isGeneratingItinerary, // Fix: Use specific loading state
+        isGeneratingItinerary,
         isGeneratingPdf,
         savedConfirmation,
         tripHistory,
@@ -168,19 +166,14 @@ const TripPlanner: React.FC = () => {
     
     const handleShowDayMap = (day: Day) => {
         const points = day.gpxTrack || [];
-        
         if (points.length < 2) {
             alert('Dati GPS insufficienti per visualizzare la mappa.');
             return;
         }
-    
         const segments = createNavigationSegments(points, { maxWaypointsPerSegment: 9 });
-        
         if (segments.length === 1 && segments[0]) {
-            // Solo 1 segmento - apri direttamente Google Maps
             window.open(segments[0].mapUrl, '_blank');
         } else if (segments.length > 1) {
-            // Multipli segmenti - mostra il navigator
             setSelectedDayForNav(day);
             setShowSegmentNav(true);
         }
@@ -188,32 +181,19 @@ const TripPlanner: React.FC = () => {
     
     const handleShowFullMap = () => {
         if (!itinerary) return;
-
-        // --- Action 1: Quick Overview ---
         const quickViewAction = () => {
              const dailyDestinations = itinerary.dailySchedule
                 .map(day => day.gpxTrack?.[day.gpxTrack.length - 1])
                 .filter((p): p is GpxPoint => !!p);
-
-            if (dailyDestinations.length === 0) {
-                alert("Dati GPS insufficienti per creare una panoramica."); return;
-            }
-
+            if (dailyDestinations.length === 0) { alert("Dati GPS insufficienti."); return; }
             const origin = itinerary.dailySchedule[0]?.gpxTrack?.[0];
-            if (!origin) {
-                alert("Punto di partenza del viaggio non trovato."); return;
-            }
-
+            if (!origin) { alert("Punto di partenza non trovato."); return; }
             const destination = dailyDestinations[dailyDestinations.length - 1];
             const intermediateWaypoints = dailyDestinations.slice(0, -1);
-            
             const waypointsStr = intermediateWaypoints.map(p => `${p.lat},${p.lon}`).join('|');
             const url = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lon}&destination=${destination.lat},${destination.lon}&waypoints=${waypointsStr}&travelmode=driving`;
-            
             window.open(url, '_blank');
         };
-
-        // --- Action 2: Detailed Navigation ---
         const detailedNavAction = () => {
             const allSegmentsRaw = itinerary.dailySchedule.flatMap(day => {
                 const points = day.gpxTrack || [];
@@ -221,11 +201,7 @@ const TripPlanner: React.FC = () => {
                 return createNavigationSegments(points, { maxWaypointsPerSegment: 9 });
             });
             const allSegments = allSegmentsRaw.map((segment, index) => ({ ...segment, segmentNumber: index + 1 }));
-
-            if (allSegments.length === 0) {
-                alert("Nessun dato GPS navigabile trovato per l'intero viaggio."); return;
-            }
-            
+            if (allSegments.length === 0) { alert("Nessun dato GPS navigabile."); return; }
             if (allSegments.length === 1 && allSegments[0]) {
                 window.open(allSegments[0].mapUrl, '_blank');
             } else {
@@ -234,17 +210,10 @@ const TripPlanner: React.FC = () => {
                 });
             }
         };
-
-        // --- Action 3: Download GPX ---
         const downloadGpxAction = () => {
             const gpx = generateFullTripGpx(itinerary.dailySchedule, itinerary.tripTitle);
-            downloadFile(
-                gpx,
-                `${itinerary.tripTitle.replace(/\s/g, '_')}_Completo.gpx`,
-                'application/gpx+xml'
-            );
+            downloadFile(gpx, `${itinerary.tripTitle.replace(/\s/g, '_')}_Completo.gpx`, 'application/gpx+xml');
         };
-
         setMapOptions({
             onQuickView: () => { quickViewAction(); setIsMapOptionsModalOpen(false); },
             onDetailedNav: () => { detailedNavAction(); setIsMapOptionsModalOpen(false); },
@@ -268,10 +237,7 @@ const TripPlanner: React.FC = () => {
             {showSegmentNav && selectedDayForNav && (
                 <SegmentNavigator
                     day={selectedDayForNav}
-                    onClose={() => {
-                        setShowSegmentNav(false);
-                        setSelectedDayForNav(null);
-                    }}
+                    onClose={() => { setShowSegmentNav(false); setSelectedDayForNav(null); }}
                 />
             )}
 
@@ -312,7 +278,7 @@ const TripPlanner: React.FC = () => {
                                 value={customRoadPreferenceText}
                                 onChange={(e) => setDraftValue('customRoadPreferenceText', e.target.value)}
                                 rows={2}
-                                placeholder="Es. 'Voglio strade con molte curve ma con un buon asfalto, evitando i centri abitati e privilegiando i paesaggi boschivi.'"
+                                placeholder="Es. 'Voglio strade con molte curve ma con un buon asfalto...'"
                                 className="block w-full px-3 py-2 text-white bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                                 required
                             />
@@ -327,7 +293,7 @@ const TripPlanner: React.FC = () => {
                             value={customPrompt}
                             onChange={(e) => setDraftValue('customPrompt', e.target.value)}
                             rows={3}
-                            placeholder="Es. 'Includi una sosta alle terme di Bormio', 'Voglio percorrere il passo dello Stelvio', 'Evita strade sterrate'..."
+                            placeholder="Es. 'Includi una sosta alle terme di Bormio'..."
                             className="block w-full px-3 py-2 text-white bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                         />
                     </div>
@@ -336,11 +302,20 @@ const TripPlanner: React.FC = () => {
                     <Tooltip text="Genera un nuovo itinerario in base ai parametri inseriti">
                         <ActionButton type="submit" loading={isGeneratingItinerary} loadingText="Generazione...">Crea Itinerario</ActionButton>
                     </Tooltip>
+                    <Tooltip text="Pulisce tutti i campi e l'itinerario corrente per iniziare una nuova pianificazione">
+                        <ActionButton onClick={handleResetForm} disabled={isGeneratingItinerary} className="bg-gray-700 hover:bg-gray-600">
+                            <ArrowPathIcon className="w-5 h-5"/> Nuovo
+                        </ActionButton>
+                    </Tooltip>
                     <Tooltip text="Ricarica l'ultimo itinerario che hai salvato o generato">
-                        <ActionButton onClick={loadLastItinerary} disabled={isGeneratingItinerary || tripHistory.length === 0}><ClockIcon className="w-5 h-5"/>Carica Ultimo</ActionButton>
+                        <ActionButton onClick={loadLastItinerary} disabled={isGeneratingItinerary || tripHistory.length === 0} className="bg-blue-900/50 hover:bg-blue-800/50 border border-blue-700">
+                            <ClockIcon className="w-5 h-5"/>Carica Ultimo
+                        </ActionButton>
                     </Tooltip>
                     <Tooltip text="Visualizza, carica o elimina i viaggi salvati in precedenza">
-                        <ActionButton onClick={() => setShowHistory(true)} disabled={isGeneratingItinerary} className="bg-gray-600 hover:bg-gray-500"><BookOpenIcon className="w-5 h-5"/>Storico Viaggi</ActionButton>
+                        <ActionButton onClick={() => setShowHistory(true)} disabled={isGeneratingItinerary} className="bg-gray-600 hover:bg-gray-500">
+                            <BookOpenIcon className="w-5 h-5"/>Storico Viaggi
+                        </ActionButton>
                     </Tooltip>
                 </div>
             </form>
@@ -354,7 +329,6 @@ const TripPlanner: React.FC = () => {
             
             {itinerary && !isGeneratingItinerary && (
                 <div className="mt-6 animate-fade-in">
-
                     {tripMaintenanceAlerts.length > 0 && (
                         <div className="bg-yellow-500/20 text-yellow-300 p-4 rounded-md mb-6 shadow-lg" aria-live="polite">
                             <h4 className="font-bold flex items-center gap-2 text-yellow-200"><BellAlertIcon className="w-6 h-6"/> Attenzione Manutenzione!</h4>
@@ -372,10 +346,10 @@ const TripPlanner: React.FC = () => {
                             </div>
                             <div className="flex gap-2 items-center flex-wrap self-start">
                                 {savedConfirmation && <span className="text-green-400 text-sm animate-pulse mr-2">{savedConfirmation}</span>}
-                                <Tooltip text="Salva l'itinerario corrente nello storico">
+                                <Tooltip text="Salva le modifiche all'itinerario corrente o aggiungilo allo storico">
                                     <ActionButton onClick={saveItinerary}><ArchiveBoxIcon className="w-5 h-5"/> Salva</ActionButton>
                                 </Tooltip>
-                                <Tooltip text="Salva l'itinerario e resetta il form per crearne uno nuovo">
+                                <Tooltip text="Salva l'itinerario e pulisce i moduli per iniziare una nuova pianificazione">
                                     <ActionButton onClick={handleSaveAndReset} className="bg-indigo-600 hover:bg-indigo-500"><DocumentPlusIcon className="w-5 h-5"/> Salva e Nuovo</ActionButton>
                                 </Tooltip>
                                 <Tooltip text="Esporta l'itinerario in un file PDF stampabile">
@@ -397,8 +371,8 @@ const TripPlanner: React.FC = () => {
                                             <Tooltip text="Apri la mappa di questa tappa in Google Maps">
                                                 <ActionButton onClick={() => handleShowDayMap(day)} className="bg-gray-600 hover:bg-gray-500 text-xs py-1 px-2"><GlobeAltIcon className="w-4 h-4"/> Mappa Tappa</ActionButton>
                                             </Tooltip>
-                                            <Tooltip text="Scarica il file GPX di questa tappa per il tuo navigatore">
-                                                <ActionButton onClick={() => handleQuickDownloadGpx(day)} className="bg-gray-600 hover:bg-gray-500 text-xs py-1 px-2" title="Scarica GPX per navigatori"><ArrowDownOnSquareIcon className="w-4 h-4"/> GPX</ActionButton>
+                                            <Tooltip text="Scarica il file GPX di questa tappa">
+                                                <ActionButton onClick={() => handleQuickDownloadGpx(day)} className="bg-gray-600 hover:bg-gray-500 text-xs py-1 px-2"><ArrowDownOnSquareIcon className="w-4 h-4"/> GPX</ActionButton>
                                             </Tooltip>
                                         </div>
                                     </div>

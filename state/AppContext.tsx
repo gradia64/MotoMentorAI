@@ -167,7 +167,16 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
         case 'SET_PDF_GENERATING': return { ...state, isGeneratingPdf: action.payload };
         case 'SET_DIAGNOSIS_PDF_GENERATING': return { ...state, isGeneratingDiagnosisPdf: action.payload };
         case 'SET_CHECKLIST_PDF_GENERATING': return { ...state, isGeneratingChecklistPdf: action.payload };
-        case 'RESET_TRIP_PLANNER_FORM': return { ...state, itinerary: null, activeTripId: null, drafts: { ...state.drafts, tripPlanner: initialState.drafts.tripPlanner } };
+        case 'RESET_TRIP_PLANNER_FORM': 
+            return { 
+                ...state, 
+                itinerary: null, 
+                activeTripId: null, 
+                drafts: { 
+                    ...state.drafts, 
+                    tripPlanner: { ...initialState.drafts.tripPlanner } 
+                } 
+            };
         case 'SET_ACTIVE_DIARY_TRIP': return { ...state, activeDiaryTripId: action.payload };
         default: return state;
     }
@@ -178,7 +187,6 @@ const AppContext = createContext<any>(undefined);
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
     
-    // Persistent Storage
     const [garage, setGarage] = useLocalStorage<GarageVehicle[]>('motomentor_garage', []);
     const [activeVehId, setActiveVehId] = useLocalStorage<string | null>('motomentor_active_veh', null);
     const [trips, setTrips] = useLocalStorage<SavedTrip[]>('motomentor_trips', []);
@@ -201,7 +209,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         dispatch({ type: 'SET_NOTIFICATION', payload: { message, type } });
     }, []);
 
-    // --- Garage Handlers ---
     const handleAddVehicle = (v: any) => {
         const newVeh = { ...v, id: crypto.randomUUID() };
         setGarage([...garage, newVeh]);
@@ -233,7 +240,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
 
-    // --- Planner Handlers ---
     const handleTripSubmit = useCallback(async (e: FormEvent) => {
         e.preventDefault();
         dispatch({ type: 'SET_ITINERARY_GENERATING', payload: true });
@@ -250,23 +256,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [state.drafts.tripPlanner, state.activeVehicle, showNotification]);
 
-    const saveItinerary = () => {
+    const saveItinerary = useCallback(() => {
         if (!state.itinerary) return;
+
+        // Recuperiamo il viaggio esistente se presente
+        const existingTrip = state.activeTripId ? trips.find(t => t.id === state.activeTripId) : null;
+
+        // Se esiste già, controlliamo se ci sono state modifiche effettive
+        if (existingTrip) {
+            const isUnchanged = JSON.stringify(existingTrip.inputs) === JSON.stringify(state.drafts.tripPlanner) &&
+                              JSON.stringify(existingTrip.itinerary) === JSON.stringify(state.itinerary);
+            
+            if (isUnchanged) {
+                showNotification("Nessuna modifica rilevata, il viaggio è già salvato.", "warning");
+                return;
+            }
+
+            // Se ci sono modifiche, aggiorniamo il record
+            const updatedTrips = trips.map(t => t.id === state.activeTripId ? {
+                ...t,
+                inputs: { ...state.drafts.tripPlanner },
+                itinerary: state.itinerary!
+            } : t);
+            
+            setTrips(updatedTrips);
+            showNotification("Viaggio aggiornato nello storico.");
+            return;
+        }
+
+        // Altrimenti creiamo un nuovo record
+        const newId = crypto.randomUUID();
         const newTrip: SavedTrip = {
-            id: crypto.randomUUID(),
-            inputs: state.drafts.tripPlanner,
+            id: newId,
+            inputs: { ...state.drafts.tripPlanner },
             itinerary: state.itinerary,
             diaryEntries: []
         };
         setTrips([newTrip, ...trips]);
+        dispatch({ type: 'SET_DATA', payload: { key: 'activeTripId', value: newId } });
         showNotification("Viaggio salvato nello storico.");
-    };
+    }, [state.itinerary, state.activeTripId, state.drafts.tripPlanner, trips, setTrips, showNotification]);
 
-    const handleSaveAndReset = () => {
-        saveItinerary();
+    const handleResetForm = useCallback(() => {
         dispatch({ type: 'RESET_TRIP_PLANNER_FORM' });
-        showNotification("Viaggio salvato e modulo resettato!");
-    };
+        showNotification("Moduli ripuliti. Puoi iniziare una nuova pianificazione.");
+    }, [showNotification]);
+
+    const handleSaveAndReset = useCallback(() => {
+        saveItinerary();
+        handleResetForm();
+    }, [saveItinerary, handleResetForm]);
 
     const loadLastItinerary = () => {
         if (trips.length > 0) {
@@ -287,6 +326,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const deleteTripFromHistory = (id: string) => {
         setTrips(trips.filter(t => t.id !== id));
+        if (state.activeTripId === id) {
+            dispatch({ type: 'SET_DATA', payload: { key: 'activeTripId', value: null } });
+        }
         showNotification("Viaggio eliminato.");
     };
 
@@ -306,7 +348,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
 
-    // --- Mechanic Handlers ---
     const handleMechanicSubmit = async (e: FormEvent) => {
         e.preventDefault();
         if (state.mechanicMode === 'diagnose') {
@@ -380,7 +421,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setDiagnoses(diagnoses.filter(d => d.id !== id));
     };
 
-    // --- Chat Handlers ---
     const handleSendMessage = useCallback(async (message: string) => {
         if (state.isChatLoading) return;
         
@@ -416,11 +456,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: null } });
     };
 
-    const handleLoadChatHistory = (key: string) => {
-        // Funzionalità non implementata
-    };
+    const handleLoadChatHistory = (key: string) => {};
 
-    // --- Diary Handlers ---
     const handleUpdateTrip = (updatedTrip: SavedTrip) => {
         setTrips(trips.map(t => t.id === updatedTrip.id ? updatedTrip : t));
     };
@@ -442,14 +479,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
 
-    // --- PDF Exports (Async Handlers) ---
     const handleDownloadPdf = async () => {
         const currentItinerary = state.itinerary;
         if (!currentItinerary) return;
         
         dispatch({ type: 'SET_PDF_GENERATING', payload: true });
         
-        // Usiamo un piccolo timeout per permettere al browser di renderizzare lo stato "loading"
         setTimeout(() => {
             try {
                 generatePdf(
@@ -551,7 +586,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         <AppContext.Provider value={{ 
             state, dispatch, 
             handleTripSubmit, handleSendMessage, handleAddVehicle, handleUpdateVehicle, handleDeleteVehicle,
-            handleSetActiveVehicle, saveItinerary, handleSaveAndReset, loadLastItinerary, loadTripFromHistory,
+            handleSetActiveVehicle, saveItinerary, handleSaveAndReset, handleResetForm, loadLastItinerary, loadTripFromHistory,
             deleteTripFromHistory, exportTripHistory, importTripHistory, handleDownloadPdf,
             handleMechanicSubmit, handleAddMaintenanceRecord, handleDeleteMaintenanceRecord, handleAddReminder,
             handleDeleteReminder, handleSaveOrUpdateDiagnosis, handleLoadDiagnosis, handleDeleteDiagnosis,
