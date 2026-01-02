@@ -1,18 +1,22 @@
 
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, ClockIcon, BookOpenIcon } from '@heroicons/react/24/outline';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 
 import { AiMode } from './types';
 import { AppProvider, useAppContext } from './state/AppContext';
-import TripPlanner from './features/TripPlanner/TripPlanner';
-import VirtualMechanic from './features/VirtualMechanic/VirtualMechanic';
-import Garage from './features/Garage/Garage';
-import AiChat from './features/AiChat/AiChat';
-import TripDiary from './features/TripDiary/TripDiary'; // Import new feature
 import TabButton from './components/TabButton';
 import Notification from './components/Notification';
 import Logo from './components/Logo';
+
+// --- Lazy Loading of Feature Components ---
+// This enables Code Splitting: each feature is bundled separately and 
+// only downloaded when the user switches to that specific tab.
+const TripPlanner = lazy(() => import('./features/TripPlanner/TripPlanner'));
+const VirtualMechanic = lazy(() => import('./features/VirtualMechanic/VirtualMechanic'));
+const Garage = lazy(() => import('./features/Garage/Garage'));
+const AiChat = lazy(() => import('./features/AiChat/AiChat'));
+const TripDiary = lazy(() => import('./features/TripDiary/TripDiary'));
 
 // Declare jspdf from window for global access
 declare global {
@@ -21,15 +25,13 @@ declare global {
     }
 }
 
-// --- Memoized Components for Performance ---
-// These components will only re-render if their props change. Since they don't
-// take any props and get all their data from context, this prevents them from
-// re-rendering every time *any* part of the context state changes.
-const MemoizedTripPlanner = React.memo(TripPlanner);
-const MemoizedVirtualMechanic = React.memo(VirtualMechanic);
-const MemoizedGarage = React.memo(Garage);
-const MemoizedAiChat = React.memo(AiChat);
-const MemoizedTripDiary = React.memo(TripDiary); // Memoize new component
+// --- Loading Component for Suspense ---
+const SectionLoader: React.FC = () => (
+    <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-400 font-medium">Caricamento sezione...</p>
+    </div>
+);
 
 const AppContent: React.FC = () => {
     const { state, dispatch } = useAppContext();
@@ -99,11 +101,14 @@ const AppContent: React.FC = () => {
                             </div>
                         )}
 
-                        {state.mode === AiMode.TripPlanner && <MemoizedTripPlanner />}
-                        {state.mode === AiMode.TripDiary && <MemoizedTripDiary />}
-                        {state.mode === AiMode.VirtualMechanic && <MemoizedVirtualMechanic />}
-                        {state.mode === AiMode.Garage && <MemoizedGarage />}
-                        {state.mode === AiMode.AiChat && <MemoizedAiChat />}
+                        {/* Suspense handles the asynchronous loading of the components above */}
+                        <Suspense fallback={<SectionLoader />}>
+                            {state.mode === AiMode.TripPlanner && <TripPlanner />}
+                            {state.mode === AiMode.TripDiary && <TripDiary />}
+                            {state.mode === AiMode.VirtualMechanic && <VirtualMechanic />}
+                            {state.mode === AiMode.Garage && <Garage />}
+                            {state.mode === AiMode.AiChat && <AiChat />}
+                        </Suspense>
                     </div>
                 </div>
             </main>
