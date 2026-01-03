@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Chat } from "@google/genai";
+import { GoogleGenAI, Chat, Content } from "@google/genai";
 import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, VEHICLE_SPECS_SCHEMA, DiaryEntry } from '../types';
 
 /**
@@ -175,7 +175,7 @@ export const getVehicleSpecs = async (model: string, year: string) => {
     return await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
 };
 
-export const createChatSession = (vehicle: GarageVehicle | null): Chat => {
+export const createChatSession = (vehicle: GarageVehicle | null, history: Content[] = []): Chat => {
     const apiKey = process.env.API_KEY;
     const ai = new GoogleGenAI({ apiKey });
     const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
@@ -183,5 +183,6 @@ export const createChatSession = (vehicle: GarageVehicle | null): Chat => {
     return ai.chats.create({
         model: 'gemini-3-flash-preview',
         config: { systemInstruction },
+        history: history
     });
 };

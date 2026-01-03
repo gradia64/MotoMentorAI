@@ -2,7 +2,7 @@
 import React, { createContext, useReducer, useContext, useEffect, ReactNode, useCallback, FormEvent } from 'react';
 import { Chat, Content, GenerateContentResponse } from '@google/genai';
 import { generateItinerary, diagnoseProblem, getMaintenanceTips, createChatSession, getVehicleSpecs, generateTripDiarySummary } from '../services/geminiService';
-import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, SavedTrip, MaintenanceRecord, MaintenanceReminder, SavedDiagnosis, DiaryEntry, MaintenanceType } from '../types';
+import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, SavedTrip, MaintenanceRecord, MaintenanceReminder, SavedDiagnosis, DiaryEntry, MaintenanceType, SavedChat } from '../types';
 import { useLocalStorage } from '../utils/hooks';
 import { generatePdf } from '../utils/pdf';
 import { downloadFile } from '../utils/mapsHelpers';
@@ -10,12 +10,6 @@ import { downloadFile } from '../utils/mapsHelpers';
 interface Notification {
     message: string;
     type: 'success' | 'error' | 'warning';
-}
-
-export interface ChatHistoryItem {
-    key: string;
-    vehicleName: string;
-    lastUpdated: string | null;
 }
 
 interface DeadlineAlert {
@@ -47,6 +41,7 @@ export interface AppState {
     reminders: MaintenanceReminder[];
     tripHistory: SavedTrip[];
     savedDiagnoses: SavedDiagnosis[];
+    savedChats: SavedChat[];
     deadlineAlerts: DeadlineAlert[];
     itinerary: Itinerary | null;
     activeTripId: string | null;
@@ -57,7 +52,6 @@ export interface AppState {
     activeDiaryTripId: string | null;
     chatSession: Chat | null;
     chatHistory: Content[];
-    chatHistoryList: ChatHistoryItem[];
     drafts: {
         tripPlanner: {
             tripType: 'itinerary' | 'tour';
@@ -118,6 +112,7 @@ const initialState: AppState = {
     reminders: [],
     tripHistory: [],
     savedDiagnoses: [],
+    savedChats: [],
     deadlineAlerts: [],
     itinerary: null,
     activeTripId: null,
@@ -128,7 +123,6 @@ const initialState: AppState = {
     activeDiaryTripId: null,
     chatSession: null,
     chatHistory: [],
-    chatHistoryList: [],
     drafts: {
         tripPlanner: {
             tripType: 'itinerary',
@@ -193,6 +187,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [diagnoses, setDiagnoses] = useLocalStorage<SavedDiagnosis[]>('motomentor_diagnoses', []);
     const [mLog, setMLog] = useLocalStorage<MaintenanceRecord[]>('motomentor_mlog', []);
     const [mReminders, setMReminders] = useLocalStorage<MaintenanceReminder[]>('motomentor_reminders', []);
+    const [chats, setSavedChats] = useLocalStorage<SavedChat[]>('motomentor_chats', []);
 
     useEffect(() => {
         dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: garage } });
@@ -204,6 +199,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: diagnoses } }); }, [diagnoses]);
     useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: mLog } }); }, [mLog]);
     useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: mReminders } }); }, [mReminders]);
+    useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'savedChats', value: chats } }); }, [chats]);
 
     const showNotification = useCallback((message: string, type: 'success' | 'error' | 'warning' = 'success') => {
         dispatch({ type: 'SET_NOTIFICATION', payload: { message, type } });
@@ -426,7 +422,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         let session = state.chatSession;
         if (!session) {
-            session = createChatSession(state.activeVehicle);
+            session = createChatSession(state.activeVehicle, state.chatHistory);
             dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: session } });
         }
 
@@ -456,7 +452,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: null } });
     };
 
-    const handleLoadChatHistory = (key: string) => {};
+    const handleSaveCurrentChat = () => {
+        if (state.chatHistory.length === 0) {
+            showNotification("La chat è vuota, nulla da salvare.", "warning");
+            return;
+        }
+        const newChat: SavedChat = {
+            id: crypto.randomUUID(),
+            vehicleName: state.activeVehicle?.model || "Generica",
+            timestamp: new Date().toISOString(),
+            history: [...state.chatHistory]
+        };
+        setSavedChats([newChat, ...chats]);
+        showNotification("Conversazione salvata nello storico.");
+    };
+
+    const handleLoadChatHistory = (id: string) => {
+        const chat = chats.find(c => c.id === id);
+        if (chat) {
+            dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: chat.history } });
+            dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: null } }); // Sessione verrà ricreata con history al prossimo invio
+            showNotification("Conversazione caricata.");
+        }
+    };
+
+    const handleDeleteSavedChat = (id: string) => {
+        setSavedChats(chats.filter(c => c.id !== id));
+        showNotification("Conversazione eliminata dallo storico.");
+    };
 
     const handleUpdateTrip = (updatedTrip: SavedTrip) => {
         setTrips(trips.map(t => t.id === updatedTrip.id ? updatedTrip : t));
@@ -592,7 +615,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             handleDeleteReminder, handleSaveOrUpdateDiagnosis, handleLoadDiagnosis, handleDeleteDiagnosis,
             handleDownloadDiagnosisPdf, handleDownloadChecklistPdf, handleGenerateSpecs,
             handleUpdateTrip, handleGenerateDiarySummary, handleDownloadDiaryPdf,
-            handleClearActiveChat, handleLoadChatHistory
+            handleClearActiveChat, handleSaveCurrentChat, handleLoadChatHistory, handleDeleteSavedChat
         }}>
             {children}
         </AppContext.Provider>

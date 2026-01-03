@@ -1,13 +1,15 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { SparklesIcon, BookOpenIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { SparklesIcon, BookOpenIcon, TrashIcon, ArchiveBoxIcon } from '@heroicons/react/24/outline';
 import { PaperAirplaneIcon } from '@heroicons/react/24/solid';
 import { useAppContext } from '../../state/AppContext';
 import ChatHistoryModal from './ChatHistoryModal';
 import { ConfirmationModal } from '../Garage/Garage';
+import Tooltip from '../../components/Tooltip';
 
 const AiChat: React.FC = () => {
-    const { state, handleSendMessage, handleClearActiveChat, handleLoadChatHistory } = useAppContext();
-    const { activeVehicle, chatHistory, isChatLoading, chatHistoryList } = state;
+    const { state, handleSendMessage, handleClearActiveChat, handleLoadChatHistory, handleSaveCurrentChat, handleDeleteSavedChat } = useAppContext();
+    const { activeVehicle, chatHistory, isChatLoading, savedChats } = state;
     const [input, setInput] = useState('');
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
@@ -67,8 +69,9 @@ const AiChat: React.FC = () => {
             <ChatHistoryModal 
                 show={showHistoryModal} 
                 onClose={() => setShowHistoryModal(false)}
-                history={chatHistoryList}
+                history={savedChats}
                 onLoad={handleLoadChatHistory}
+                onDelete={handleDeleteSavedChat}
             />
             <div className="flex justify-between items-center">
                 <div>
@@ -80,23 +83,38 @@ const AiChat: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button 
-                        onClick={() => setShowHistoryModal(true)} 
-                        className="flex items-center gap-2 text-sm font-semibold text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-md transition-colors"
-                        aria-label="Apri storico chat"
-                    >
-                        <BookOpenIcon className="w-5 h-5"/>
-                        <span className="hidden sm:inline">Storico</span>
-                    </button>
-                    <button
-                        onClick={() => setIsClearConfirmOpen(true)}
-                        disabled={chatHistory.length === 0 || isChatLoading}
-                        className="flex items-center gap-2 text-sm font-semibold text-gray-300 bg-red-800/50 hover:bg-red-700/50 px-3 py-2 rounded-md transition-colors disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed"
-                        aria-label="Cancella chat attiva"
-                    >
-                        <TrashIcon className="w-5 h-5" />
-                        <span className="hidden sm:inline">Cancella</span>
-                    </button>
+                    <Tooltip text="Salva la conversazione corrente nello storico">
+                        <button 
+                            onClick={handleSaveCurrentChat}
+                            disabled={chatHistory.length === 0 || isChatLoading}
+                            className="flex items-center gap-2 text-sm font-semibold text-white bg-green-700 hover:bg-green-600 px-3 py-2 rounded-md transition-colors disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed"
+                            aria-label="Salva chat attiva"
+                        >
+                            <ArchiveBoxIcon className="w-5 h-5"/>
+                            <span className="hidden sm:inline">Salva</span>
+                        </button>
+                    </Tooltip>
+                    <Tooltip text="Visualizza le conversazioni salvate">
+                        <button 
+                            onClick={() => setShowHistoryModal(true)} 
+                            className="flex items-center gap-2 text-sm font-semibold text-gray-300 bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-md transition-colors"
+                            aria-label="Apri storico chat"
+                        >
+                            <BookOpenIcon className="w-5 h-5"/>
+                            <span className="hidden sm:inline">Storico</span>
+                        </button>
+                    </Tooltip>
+                    <Tooltip text="Svuota la chat corrente (senza salvarla)">
+                        <button
+                            onClick={() => setIsClearConfirmOpen(true)}
+                            disabled={chatHistory.length === 0 || isChatLoading}
+                            className="flex items-center gap-2 text-sm font-semibold text-gray-300 bg-red-800/50 hover:bg-red-700/50 px-3 py-2 rounded-md transition-colors disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed"
+                            aria-label="Cancella chat attiva"
+                        >
+                            <TrashIcon className="w-5 h-5" />
+                            <span className="hidden sm:inline">Pulisci</span>
+                        </button>
+                    </Tooltip>
                 </div>
             </div>
             

@@ -1,16 +1,18 @@
+
 import React from 'react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useEscapeKey } from '../../utils/hooks';
-import { ChatHistoryItem } from '../../state/AppContext';
+import { SavedChat } from '../../types';
 
 interface ChatHistoryModalProps {
     show: boolean;
     onClose: () => void;
-    history: ChatHistoryItem[];
-    onLoad: (key: string) => void;
+    history: SavedChat[];
+    onLoad: (id: string) => void;
+    onDelete: (id: string) => void;
 }
 
-const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({ show, onClose, history, onLoad }) => {
+const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({ show, onClose, history, onLoad, onDelete }) => {
     useEscapeKey(onClose, show);
 
     if (!show) return null;
@@ -28,26 +30,31 @@ const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({ show, onClose, hist
                     ) : (
                         <div className="space-y-3">
                             {history.map(item => (
-                                <button
-                                    key={item.key}
-                                    onClick={() => { onLoad(item.key); onClose(); }}
-                                    className="bg-gray-700/50 p-3 rounded-lg w-full text-left hover:bg-gray-700 transition-colors"
-                                >
-                                    <div>
+                                <div key={item.id} className="bg-gray-700/50 p-3 rounded-lg flex items-center justify-between gap-3 group">
+                                    <button
+                                        onClick={() => { onLoad(item.id); onClose(); }}
+                                        className="flex-grow text-left hover:bg-gray-700/50 transition-colors rounded-md p-1"
+                                    >
                                         <p className="font-semibold text-white">{item.vehicleName}</p>
-                                        {item.lastUpdated && (
-                                            <p className="text-sm text-gray-400">
-                                                {new Date(item.lastUpdated).toLocaleString('it-IT', { 
-                                                    day: '2-digit', 
-                                                    month: 'short', 
-                                                    year: 'numeric', 
-                                                    hour: '2-digit', 
-                                                    minute: '2-digit' 
-                                                })}
-                                            </p>
-                                        )}
-                                    </div>
-                                </button>
+                                        <p className="text-sm text-gray-400">
+                                            {new Date(item.timestamp).toLocaleString('it-IT', { 
+                                                day: '2-digit', 
+                                                month: 'short', 
+                                                year: 'numeric', 
+                                                hour: '2-digit', 
+                                                minute: '2-digit' 
+                                            })}
+                                        </p>
+                                        <p className="text-xs text-blue-400 mt-1">{item.history.length} messaggi</p>
+                                    </button>
+                                    <button 
+                                        onClick={() => onDelete(item.id)}
+                                        className="text-gray-500 hover:text-red-500 p-2 transition-colors flex-shrink-0"
+                                        title="Elimina chat dallo storico"
+                                    >
+                                        <TrashIcon className="w-5 h-5"/>
+                                    </button>
+                                </div>
                             ))}
                         </div>
                     )}

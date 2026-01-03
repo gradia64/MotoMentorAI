@@ -1,5 +1,5 @@
 
-import { Type } from '@google/genai';
+import { Type, Content } from '@google/genai';
 
 export enum AiMode {
     TripPlanner = 'TripPlanner',
@@ -116,6 +116,13 @@ export interface SavedDiagnosis {
     date: string; // ISO string
     problemDescription: string;
     diagnosisText: string;
+}
+
+export interface SavedChat {
+    id: string;
+    vehicleName: string;
+    timestamp: string;
+    history: Content[];
 }
 
 // --- SCHEMAS ---
