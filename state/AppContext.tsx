@@ -48,6 +48,7 @@ export interface AppState {
     tripMaintenanceAlerts: string[];
     diagnosis: string | null;
     activeDiagnosisId: string | null;
+    activeChatId: string | null;
     maintenanceTips: MaintenanceTips | null;
     activeDiaryTripId: string | null;
     chatSession: Chat | null;
@@ -119,6 +120,7 @@ const initialState: AppState = {
     tripMaintenanceAlerts: [],
     diagnosis: null,
     activeDiagnosisId: null,
+    activeChatId: null,
     maintenanceTips: null,
     activeDiaryTripId: null,
     chatSession: null,
@@ -255,10 +257,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const saveItinerary = useCallback(() => {
         if (!state.itinerary) return;
 
-        // Recuperiamo il viaggio esistente se presente
         const existingTrip = state.activeTripId ? trips.find(t => t.id === state.activeTripId) : null;
 
-        // Se esiste già, controlliamo se ci sono state modifiche effettive
         if (existingTrip) {
             const isUnchanged = JSON.stringify(existingTrip.inputs) === JSON.stringify(state.drafts.tripPlanner) &&
                               JSON.stringify(existingTrip.itinerary) === JSON.stringify(state.itinerary);
@@ -268,7 +268,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 return;
             }
 
-            // Se ci sono modifiche, aggiorniamo il record
             const updatedTrips = trips.map(t => t.id === state.activeTripId ? {
                 ...t,
                 inputs: { ...state.drafts.tripPlanner },
@@ -280,7 +279,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return;
         }
 
-        // Altrimenti creiamo un nuovo record
         const newId = crypto.randomUUID();
         const newTrip: SavedTrip = {
             id: newId,
@@ -450,6 +448,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const handleClearActiveChat = () => {
         dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: [] } });
         dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: null } });
+        dispatch({ type: 'SET_DATA', payload: { key: 'activeChatId', value: null } });
     };
 
     const handleSaveCurrentChat = () => {
@@ -457,27 +456,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             showNotification("La chat è vuota, nulla da salvare.", "warning");
             return;
         }
-        const newChat: SavedChat = {
-            id: crypto.randomUUID(),
-            vehicleName: state.activeVehicle?.model || "Generica",
-            timestamp: new Date().toISOString(),
-            history: [...state.chatHistory]
-        };
-        setSavedChats([newChat, ...chats]);
-        showNotification("Conversazione salvata nello storico.");
+
+        if (state.activeChatId) {
+            // Aggiorna chat esistente
+            const updatedChats = chats.map(c => c.id === state.activeChatId ? {
+                ...c,
+                history: [...state.chatHistory],
+                timestamp: new Date().toISOString()
+            } : c);
+            setSavedChats(updatedChats);
+            showNotification("Conversazione aggiornata nello storico.");
+        } else {
+            // Crea nuova chat
+            const newId = crypto.randomUUID();
+            const newChat: SavedChat = {
+                id: newId,
+                vehicleName: state.activeVehicle?.model || "Generica",
+                timestamp: new Date().toISOString(),
+                history: [...state.chatHistory]
+            };
+            setSavedChats([newChat, ...chats]);
+            dispatch({ type: 'SET_DATA', payload: { key: 'activeChatId', value: newId } });
+            showNotification("Conversazione salvata nello storico.");
+        }
     };
 
     const handleLoadChatHistory = (id: string) => {
         const chat = chats.find(c => c.id === id);
         if (chat) {
             dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: chat.history } });
-            dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: null } }); // Sessione verrà ricreata con history al prossimo invio
+            dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: null } });
+            dispatch({ type: 'SET_DATA', payload: { key: 'activeChatId', value: chat.id } });
             showNotification("Conversazione caricata.");
         }
     };
 
     const handleDeleteSavedChat = (id: string) => {
         setSavedChats(chats.filter(c => c.id !== id));
+        if (state.activeChatId === id) {
+            dispatch({ type: 'SET_DATA', payload: { key: 'activeChatId', value: null } });
+        }
         showNotification("Conversazione eliminata dallo storico.");
     };
 
