@@ -55,9 +55,9 @@ const apiProxy = async (model: string, contents: any, config: any) => {
         console.error(`Gemini API Error (${model}):`, e);
 
         // Se l'errore è 429 (Quota esaurita) e stiamo usando il Pro, tentiamo il fallback sul Flash
-        if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3-pro-preview') {
-            console.warn("Quota Pro esaurita, tentativo di fallback su Gemini 3 Flash...");
-            return await apiProxy('gemini-3-flash-preview', contents, config);
+        if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3.1-pro-preview') {
+            console.warn("Quota Pro esaurita, tentativo di fallback su Gemini 3.1 Flash...");
+            return await apiProxy('gemini-3.1-flash-preview', contents, config);
         }
 
         if (e.message?.includes("Requested entity was not found")) {
@@ -81,8 +81,8 @@ const textApiProxy = async (model: string, contents: any, config?: any) => {
          return response.text || "Nessuna risposta generata.";
     } catch (e: any) {
          console.error(`Gemini Text API Error (${model}):`, e);
-         if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3-pro-preview') {
-            return await textApiProxy('gemini-3-flash-preview', contents, config);
+         if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3.1-pro-preview') {
+            return await textApiProxy('gemini-3.1-flash-preview', contents, config);
          }
          throw e;
     }
@@ -131,7 +131,7 @@ REGOLE JSON: Restituisci esclusivamente l'oggetto JSON richiesto secondo ITINERA
     };
     
     // Tenta prima con il modello Pro, apiProxy gestirà il fallback a Flash in caso di errore 429
-    const response = await apiProxy('gemini-3-pro-preview', { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy('gemini-3.1-pro-preview', { parts: [{ text: prompt }] }, config);
     return mapApiItineraryToAppItinerary(response);
 };
 
@@ -149,13 +149,13 @@ Esegui un'analisi tecnica dettagliata.`;
         });
         parts.push({ inlineData: { data: base64Data, mimeType: image.type } });
     }
-    return await textApiProxy('gemini-3-pro-preview', { parts });
+    return await textApiProxy('gemini-3.1-pro-preview', { parts });
 };
 
 export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: GarageVehicle): Promise<MaintenanceTips> => {
     const prompt = `Checklist pre-viaggio per ${motorcycle.model} destinazione ${itinerary.tripTitle}.`;
     const config = { responseMimeType: "application/json", responseSchema: MAINTENANCE_TIPS_SCHEMA };
-    const response = await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy('gemini-3.1-flash-preview', { parts: [{ text: prompt }] }, config);
     return {
         essentialChecks: response.controlli_essenziali || [],
         tripSpecificTips: response.suggerimenti_specifici_viaggio || [],
@@ -166,13 +166,13 @@ export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: Garag
 export const generateTripDiarySummary = async (itinerary: Itinerary, entries: DiaryEntry[]): Promise<string> => {
     const diaryContent = entries.map(e => `Giorno ${e.day}: "${e.content}"`).join('\n');
     const prompt = `Scrivi il racconto epico del viaggio "${itinerary.tripTitle}" basandoti su queste note: ${diaryContent}.`;
-    return await textApiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] });
+    return await textApiProxy('gemini-3.1-flash-preview', { parts: [{ text: prompt }] });
 };
 
 export const getVehicleSpecs = async (model: string, year: string) => {
     const prompt = `Dati tecnici ufficiali per ${model} (${year}).`;
     const config = { responseMimeType: "application/json", responseSchema: VEHICLE_SPECS_SCHEMA };
-    return await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
+    return await apiProxy('gemini-3.1-flash-preview', { parts: [{ text: prompt }] }, config);
 };
 
 export const createChatSession = (vehicle: GarageVehicle | null, history: Content[] = []): Chat => {
@@ -181,7 +181,7 @@ export const createChatSession = (vehicle: GarageVehicle | null, history: Conten
     const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
 
     return ai.chats.create({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3.1-flash-preview',
         config: { systemInstruction },
         history: history
     });
