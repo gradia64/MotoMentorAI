@@ -2,22 +2,9 @@
 import { GoogleGenAI, Chat, Content } from "@google/genai";
 import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, VEHICLE_SPECS_SCHEMA, DiaryEntry } from '../types';
 
-/**
- * Verifica se l'utente ha selezionato una chiave API valida tramite l'interfaccia di AI Studio.
- * Obbligatorio per modelli Gemini 3 Pro.
- */
-const ensureApiKey = async () => {
-    if (window.aistudio) {
-        const hasKey = await window.aistudio.hasSelectedApiKey();
-        if (!hasKey) {
-            await window.aistudio.openSelectKey();
-        }
-    }
-};
-
 const getAi = () => {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) throw new Error("API_KEY non configurata nel sistema.");
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY non configurata nel sistema.");
     return new GoogleGenAI({ apiKey });
 };
 
@@ -43,26 +30,30 @@ const cleanJsonString = (text: string): string => {
 };
 
 const apiProxy = async (model: string, contents: any, config: any) => {
-    await ensureApiKey();
     try {
         const ai = getAi();
         const response = await ai.models.generateContent({ model, contents, config });
         const rawText = response.text || "";
         const cleanedText = cleanJsonString(rawText);
         if (!cleanedText) throw new Error("L'IA ha restituito una risposta vuota.");
-        return JSON.parse(cleanedText);
+        
+        try {
+            return JSON.parse(cleanedText);
+        } catch (parseError: any) {
+            console.error("JSON Parse Error. Raw text:", rawText);
+            throw new Error(`Errore di sintassi nella risposta dell'IA: ${parseError.message}`);
+        }
     } catch (e: any) {
         console.error(`Gemini API Error (${model}):`, e);
 
         // Se l'errore è 429 (Quota esaurita) e stiamo usando il Pro, tentiamo il fallback sul Flash
         if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3.1-pro-preview') {
             console.warn("Quota Pro esaurita, tentativo di fallback su Gemini 3.1 Flash...");
-            return await apiProxy('gemini-3.1-flash-preview', contents, config);
+            return await apiProxy('gemini-3-flash-preview', contents, config);
         }
 
         if (e.message?.includes("Requested entity was not found")) {
-            if (window.aistudio) await window.aistudio.openSelectKey();
-            throw new Error("Progetto API non trovato. Seleziona una chiave da un progetto con billing attivo.");
+            throw new Error("Modello non trovato o non accessibile.");
         }
         
         if (e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) {
@@ -74,7 +65,6 @@ const apiProxy = async (model: string, contents: any, config: any) => {
 };
 
 const textApiProxy = async (model: string, contents: any, config?: any) => {
-    await ensureApiKey();
     try {
          const ai = getAi();
          const response = await ai.models.generateContent({ model, contents, config });
@@ -82,7 +72,7 @@ const textApiProxy = async (model: string, contents: any, config?: any) => {
     } catch (e: any) {
          console.error(`Gemini Text API Error (${model}):`, e);
          if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3.1-pro-preview') {
-            return await textApiProxy('gemini-3.1-flash-preview', contents, config);
+            return await textApiProxy('gemini-3-flash-preview', contents, config);
          }
          throw e;
     }
@@ -155,7 +145,7 @@ Esegui un'analisi tecnica dettagliata.`;
 export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: GarageVehicle): Promise<MaintenanceTips> => {
     const prompt = `Checklist pre-viaggio per ${motorcycle.model} destinazione ${itinerary.tripTitle}.`;
     const config = { responseMimeType: "application/json", responseSchema: MAINTENANCE_TIPS_SCHEMA };
-    const response = await apiProxy('gemini-3.1-flash-preview', { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
     return {
         essentialChecks: response.controlli_essenziali || [],
         tripSpecificTips: response.suggerimenti_specifici_viaggio || [],
@@ -166,22 +156,28 @@ export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: Garag
 export const generateTripDiarySummary = async (itinerary: Itinerary, entries: DiaryEntry[]): Promise<string> => {
     const diaryContent = entries.map(e => `Giorno ${e.day}: "${e.content}"`).join('\n');
     const prompt = `Scrivi il racconto epico del viaggio "${itinerary.tripTitle}" basandoti su queste note: ${diaryContent}.`;
-    return await textApiProxy('gemini-3.1-flash-preview', { parts: [{ text: prompt }] });
+    return await textApiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] });
 };
 
 export const getVehicleSpecs = async (model: string, year: string) => {
-    const prompt = `Dati tecnici ufficiali per ${model} (${year}).`;
+    const prompt = `Restituisci i dati tecnici ufficiali per la moto ${model} (${year}). Assicurati di restituire un JSON valido e che tutti i valori numerici includano l'unità di misura e siano racchiusi tra virgolette come stringhe (es. "776 cc", "84 CV").`;
     const config = { responseMimeType: "application/json", responseSchema: VEHICLE_SPECS_SCHEMA };
-    return await apiProxy('gemini-3.1-flash-preview', { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
+    return {
+        displacement: response.cilindrata || '',
+        power: response.potenza || '',
+        frontTire: response.pneumatico_anteriore || '',
+        rearTire: response.pneumatico_posteriore || ''
+    };
 };
 
 export const createChatSession = (vehicle: GarageVehicle | null, history: Content[] = []): Chat => {
-    const apiKey = process.env.API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     const ai = new GoogleGenAI({ apiKey });
     const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
 
     return ai.chats.create({
-        model: 'gemini-3.1-flash-preview',
+        model: 'gemini-3-flash-preview',
         config: { systemInstruction },
         history: history
     });

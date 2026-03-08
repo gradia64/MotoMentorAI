@@ -22,6 +22,9 @@ interface DeadlineAlert {
 }
 
 export interface AppState {
+    user: any | null;
+    isAuthenticated: boolean;
+    isCheckingAuth: boolean;
     mode: AiMode;
     isLoadingData: boolean;
     isGeneratingItinerary: boolean;
@@ -74,6 +77,8 @@ export interface AppState {
 }
 
 export type AppAction =
+    | { type: 'SET_AUTH'; payload: { user: any | null, isAuthenticated: boolean } }
+    | { type: 'SET_CHECKING_AUTH'; payload: boolean }
     | { type: 'SET_MODE'; payload: AiMode }
     | { type: 'SET_DATA'; payload: { key: keyof AppState, value: any } }
     | { type: 'SET_NOTIFICATION'; payload: Notification | null }
@@ -94,6 +99,9 @@ export type AppAction =
     | { type: 'SET_CHECKLIST_PDF_GENERATING'; payload: boolean };
 
 const initialState: AppState = {
+    user: null,
+    isAuthenticated: false,
+    isCheckingAuth: true,
     mode: AiMode.TripPlanner,
     isLoadingData: false,
     isGeneratingItinerary: false,
@@ -147,6 +155,8 @@ const initialState: AppState = {
 
 const appReducer = (state: AppState, action: AppAction): AppState => {
     switch (action.type) {
+        case 'SET_AUTH': return { ...state, user: action.payload.user, isAuthenticated: action.payload.isAuthenticated };
+        case 'SET_CHECKING_AUTH': return { ...state, isCheckingAuth: action.payload };
         case 'SET_MODE': return { ...state, mode: action.payload };
         case 'SET_DATA': return { ...state, [action.payload.key]: action.payload.value };
         case 'SET_NOTIFICATION': return { ...state, notification: action.payload };
@@ -183,13 +193,104 @@ const AppContext = createContext<any>(undefined);
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
     
-    const [garage, setGarage] = useLocalStorage<GarageVehicle[]>('motomentor_garage', []);
-    const [activeVehId, setActiveVehId] = useLocalStorage<string | null>('motomentor_active_veh', null);
-    const [trips, setTrips] = useLocalStorage<SavedTrip[]>('motomentor_trips', []);
-    const [diagnoses, setDiagnoses] = useLocalStorage<SavedDiagnosis[]>('motomentor_diagnoses', []);
-    const [mLog, setMLog] = useLocalStorage<MaintenanceRecord[]>('motomentor_mlog', []);
-    const [mReminders, setMReminders] = useLocalStorage<MaintenanceReminder[]>('motomentor_reminders', []);
-    const [chats, setSavedChats] = useLocalStorage<SavedChat[]>('motomentor_chats', []);
+    // Rimuoviamo useLocalStorage e usiamo lo stato locale che verrà popolato dalle API
+    const [garage, setGarage] = React.useState<GarageVehicle[]>([]);
+    const [activeVehId, setActiveVehId] = React.useState<string | null>(null);
+    const [trips, setTrips] = React.useState<SavedTrip[]>([]);
+    const [diagnoses, setDiagnoses] = React.useState<SavedDiagnosis[]>([]);
+    const [mLog, setMLog] = React.useState<MaintenanceRecord[]>([]);
+    const [mReminders, setMReminders] = React.useState<MaintenanceReminder[]>([]);
+    const [chats, setSavedChats] = React.useState<SavedChat[]>([]);
+
+    const getToken = () => localStorage.getItem('motomentor_token');
+    const setToken = (token: string) => localStorage.setItem('motomentor_token', token);
+    const removeToken = () => localStorage.removeItem('motomentor_token');
+
+    const apiFetch = async (url: string, options: RequestInit = {}) => {
+        const token = getToken();
+        const headers: any = {
+            'Content-Type': 'application/json',
+            ...options.headers,
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        const res = await fetch(url, { ...options, headers });
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.error || `API Error: ${res.status}`);
+        }
+        return res.json();
+    };
+
+    const loadUserData = async () => {
+        try {
+            const [g, t, d, m, r, c] = await Promise.all([
+                apiFetch('/api/garage'),
+                apiFetch('/api/trips'),
+                apiFetch('/api/diagnoses'),
+                apiFetch('/api/maintenance'),
+                apiFetch('/api/reminders'),
+                apiFetch('/api/chats')
+            ]);
+            setGarage(g);
+            setTrips(t);
+            setDiagnoses(d);
+            setMLog(m);
+            setMReminders(r);
+            setSavedChats(c);
+        } catch (e) {
+            console.error("Failed to load user data", e);
+        }
+    };
+
+    const checkAuth = async () => {
+        dispatch({ type: 'SET_CHECKING_AUTH', payload: true });
+        const token = getToken();
+        if (token) {
+            try {
+                const { user } = await apiFetch('/api/auth/me');
+                dispatch({ type: 'SET_AUTH', payload: { user, isAuthenticated: true } });
+                await loadUserData();
+            } catch (e) {
+                removeToken();
+                dispatch({ type: 'SET_AUTH', payload: { user: null, isAuthenticated: false } });
+            }
+        } else {
+            dispatch({ type: 'SET_AUTH', payload: { user: null, isAuthenticated: false } });
+        }
+        dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
+    };
+
+    const login = async (username: string, password: string) => {
+        const data = await apiFetch('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ username, password })
+        });
+        setToken(data.token);
+        dispatch({ type: 'SET_AUTH', payload: { user: data.user, isAuthenticated: true } });
+        await loadUserData();
+    };
+
+    const register = async (username: string, password: string) => {
+        const data = await apiFetch('/api/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({ username, password })
+        });
+        setToken(data.token);
+        dispatch({ type: 'SET_AUTH', payload: { user: data.user, isAuthenticated: true } });
+        await loadUserData();
+    };
+
+    const logout = () => {
+        removeToken();
+        dispatch({ type: 'SET_AUTH', payload: { user: null, isAuthenticated: false } });
+        setGarage([]);
+        setTrips([]);
+        setDiagnoses([]);
+        setMLog([]);
+        setMReminders([]);
+        setSavedChats([]);
+    };
 
     useEffect(() => {
         dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: garage } });
@@ -207,21 +308,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         dispatch({ type: 'SET_NOTIFICATION', payload: { message, type } });
     }, []);
 
-    const handleAddVehicle = (v: any) => {
+    const handleAddVehicle = async (v: any) => {
         const newVeh = { ...v, id: crypto.randomUUID() };
-        setGarage([...garage, newVeh]);
-        showNotification("Moto aggiunta al garage!");
+        try {
+            await apiFetch('/api/garage', { method: 'POST', body: JSON.stringify(newVeh) });
+            setGarage([...garage, newVeh]);
+            showNotification("Moto aggiunta al garage!");
+        } catch (e: any) {
+            showNotification(e.message, "error");
+        }
     };
 
-    const handleUpdateVehicle = (updated: GarageVehicle) => {
-        setGarage(garage.map(v => v.id === updated.id ? updated : v));
-        showNotification("Dati veicolo aggiornati.");
+    const handleUpdateVehicle = async (updated: GarageVehicle) => {
+        try {
+            await apiFetch('/api/garage', { method: 'PUT', body: JSON.stringify(updated) });
+            setGarage(garage.map(v => v.id === updated.id ? updated : v));
+            showNotification("Dati veicolo aggiornati.");
+        } catch (e: any) {
+            showNotification(e.message, "error");
+        }
     };
 
-    const handleDeleteVehicle = (id: string) => {
-        setGarage(garage.filter(v => v.id !== id));
-        if (activeVehId === id) setActiveVehId(null);
-        showNotification("Veicolo rimosso.");
+    const handleDeleteVehicle = async (id: string) => {
+        try {
+            await apiFetch(`/api/garage/${id}`, { method: 'DELETE' });
+            setGarage(garage.filter(v => v.id !== id));
+            if (activeVehId === id) setActiveVehId(null);
+            showNotification("Veicolo rimosso.");
+        } catch (e: any) {
+            showNotification(e.message, "error");
+        }
     };
 
     const handleSetActiveVehicle = (id: string) => {
@@ -254,7 +370,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [state.drafts.tripPlanner, state.activeVehicle, showNotification]);
 
-    const saveItinerary = useCallback(() => {
+    const saveItinerary = useCallback(async () => {
         if (!state.itinerary) return;
 
         const existingTrip = state.activeTripId ? trips.find(t => t.id === state.activeTripId) : null;
@@ -268,14 +384,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 return;
             }
 
-            const updatedTrips = trips.map(t => t.id === state.activeTripId ? {
-                ...t,
+            const updatedTrip = {
+                ...existingTrip,
                 inputs: { ...state.drafts.tripPlanner },
                 itinerary: state.itinerary!
-            } : t);
+            };
             
-            setTrips(updatedTrips);
-            showNotification("Viaggio aggiornato nello storico.");
+            try {
+                await apiFetch('/api/trips', { method: 'POST', body: JSON.stringify(updatedTrip) });
+                setTrips(trips.map(t => t.id === state.activeTripId ? updatedTrip : t));
+                showNotification("Viaggio aggiornato nello storico.");
+            } catch (e: any) {
+                showNotification(e.message, "error");
+            }
             return;
         }
 
@@ -286,10 +407,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             itinerary: state.itinerary,
             diaryEntries: []
         };
-        setTrips([newTrip, ...trips]);
-        dispatch({ type: 'SET_DATA', payload: { key: 'activeTripId', value: newId } });
-        showNotification("Viaggio salvato nello storico.");
-    }, [state.itinerary, state.activeTripId, state.drafts.tripPlanner, trips, setTrips, showNotification]);
+        try {
+            await apiFetch('/api/trips', { method: 'POST', body: JSON.stringify(newTrip) });
+            setTrips([newTrip, ...trips]);
+            dispatch({ type: 'SET_DATA', payload: { key: 'activeTripId', value: newId } });
+            showNotification("Viaggio salvato nello storico.");
+        } catch (e: any) {
+            showNotification(e.message, "error");
+        }
+    }, [state.itinerary, state.activeTripId, state.drafts.tripPlanner, trips, showNotification]);
 
     const handleResetForm = useCallback(() => {
         dispatch({ type: 'RESET_TRIP_PLANNER_FORM' });
@@ -318,12 +444,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
 
-    const deleteTripFromHistory = (id: string) => {
-        setTrips(trips.filter(t => t.id !== id));
-        if (state.activeTripId === id) {
-            dispatch({ type: 'SET_DATA', payload: { key: 'activeTripId', value: null } });
+    const deleteTripFromHistory = async (id: string) => {
+        try {
+            await apiFetch(`/api/trips/${id}`, { method: 'DELETE' });
+            setTrips(trips.filter(t => t.id !== id));
+            if (state.activeTripId === id) {
+                dispatch({ type: 'SET_DATA', payload: { key: 'activeTripId', value: null } });
+            }
+            showNotification("Viaggio eliminato.");
+        } catch (e: any) {
+            showNotification(e.message, "error");
         }
-        showNotification("Viaggio eliminato.");
     };
 
     const exportTripHistory = () => {
@@ -369,24 +500,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
 
-    const handleAddMaintenanceRecord = (record: Omit<MaintenanceRecord, 'id'>) => {
-        setMLog([{ ...record, id: crypto.randomUUID() }, ...mLog]);
-        showNotification("Intervento registrato.");
+    const handleAddMaintenanceRecord = async (record: Omit<MaintenanceRecord, 'id'>) => {
+        const newRecord = { ...record, id: crypto.randomUUID() };
+        try {
+            await apiFetch('/api/maintenance', { method: 'POST', body: JSON.stringify(newRecord) });
+            setMLog([newRecord, ...mLog]);
+            showNotification("Intervento registrato.");
+        } catch (e: any) {
+            showNotification(e.message, "error");
+        }
     };
 
-    const handleDeleteMaintenanceRecord = (id: string) => {
-        setMLog(mLog.filter(l => l.id !== id));
+    const handleDeleteMaintenanceRecord = async (id: string) => {
+        try {
+            await apiFetch(`/api/maintenance/${id}`, { method: 'DELETE' });
+            setMLog(mLog.filter(l => l.id !== id));
+        } catch (e: any) {
+            showNotification(e.message, "error");
+        }
     };
 
-    const handleAddReminder = (r: Omit<MaintenanceReminder, 'id'>) => {
-        setMReminders([...mReminders, { ...r, id: crypto.randomUUID() }]);
+    const handleAddReminder = async (r: Omit<MaintenanceReminder, 'id'>) => {
+        const newReminder = { ...r, id: crypto.randomUUID() };
+        try {
+            await apiFetch('/api/reminders', { method: 'POST', body: JSON.stringify(newReminder) });
+            setMReminders([...mReminders, newReminder]);
+        } catch (e: any) {
+            showNotification(e.message, "error");
+        }
     };
 
-    const handleDeleteReminder = (id: string) => {
-        setMReminders(mReminders.filter(r => r.id !== id));
+    const handleDeleteReminder = async (id: string) => {
+        try {
+            await apiFetch(`/api/reminders/${id}`, { method: 'DELETE' });
+            setMReminders(mReminders.filter(r => r.id !== id));
+        } catch (e: any) {
+            showNotification(e.message, "error");
+        }
     };
 
-    const handleSaveOrUpdateDiagnosis = () => {
+    const handleSaveOrUpdateDiagnosis = async () => {
         if (!state.diagnosis) return;
         const diag: SavedDiagnosis = {
             id: state.activeDiagnosisId || crypto.randomUUID(),
@@ -395,12 +548,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             problemDescription: state.drafts.virtualMechanic.problemDescription,
             diagnosisText: state.diagnosis
         };
-        if (state.activeDiagnosisId) {
-            setDiagnoses(diagnoses.map(d => d.id === diag.id ? diag : d));
-        } else {
-            setDiagnoses([diag, ...diagnoses]);
+        try {
+            await apiFetch('/api/diagnoses', { method: 'POST', body: JSON.stringify(diag) });
+            if (state.activeDiagnosisId) {
+                setDiagnoses(diagnoses.map(d => d.id === diag.id ? diag : d));
+            } else {
+                setDiagnoses([diag, ...diagnoses]);
+            }
+            showNotification("Diagnosi salvata.");
+        } catch (e: any) {
+            showNotification(e.message, "error");
         }
-        showNotification("Diagnosi salvata.");
     };
 
     const handleLoadDiagnosis = (id: string) => {
@@ -411,8 +569,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
 
-    const handleDeleteDiagnosis = (id: string) => {
-        setDiagnoses(diagnoses.filter(d => d.id !== id));
+    const handleDeleteDiagnosis = async (id: string) => {
+        try {
+            await apiFetch(`/api/diagnoses/${id}`, { method: 'DELETE' });
+            setDiagnoses(diagnoses.filter(d => d.id !== id));
+        } catch (e: any) {
+            showNotification(e.message, "error");
+        }
     };
 
     const handleSendMessage = useCallback(async (message: string) => {
@@ -451,7 +614,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         dispatch({ type: 'SET_DATA', payload: { key: 'activeChatId', value: null } });
     };
 
-    const handleSaveCurrentChat = () => {
+    const handleSaveCurrentChat = async () => {
         if (state.chatHistory.length === 0) {
             showNotification("La chat è vuota, nulla da salvare.", "warning");
             return;
@@ -459,13 +622,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (state.activeChatId) {
             // Aggiorna chat esistente
-            const updatedChats = chats.map(c => c.id === state.activeChatId ? {
-                ...c,
+            const updatedChat = {
+                ...chats.find(c => c.id === state.activeChatId)!,
                 history: [...state.chatHistory],
                 timestamp: new Date().toISOString()
-            } : c);
-            setSavedChats(updatedChats);
-            showNotification("Conversazione aggiornata nello storico.");
+            };
+            try {
+                await apiFetch('/api/chats', { method: 'POST', body: JSON.stringify(updatedChat) });
+                setSavedChats(chats.map(c => c.id === state.activeChatId ? updatedChat : c));
+                showNotification("Conversazione aggiornata nello storico.");
+            } catch (e: any) {
+                showNotification(e.message, "error");
+            }
         } else {
             // Crea nuova chat
             const newId = crypto.randomUUID();
@@ -475,9 +643,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 timestamp: new Date().toISOString(),
                 history: [...state.chatHistory]
             };
-            setSavedChats([newChat, ...chats]);
-            dispatch({ type: 'SET_DATA', payload: { key: 'activeChatId', value: newId } });
-            showNotification("Conversazione salvata nello storico.");
+            try {
+                await apiFetch('/api/chats', { method: 'POST', body: JSON.stringify(newChat) });
+                setSavedChats([newChat, ...chats]);
+                dispatch({ type: 'SET_DATA', payload: { key: 'activeChatId', value: newId } });
+                showNotification("Conversazione salvata nello storico.");
+            } catch (e: any) {
+                showNotification(e.message, "error");
+            }
         }
     };
 
@@ -491,16 +664,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
 
-    const handleDeleteSavedChat = (id: string) => {
-        setSavedChats(chats.filter(c => c.id !== id));
-        if (state.activeChatId === id) {
-            dispatch({ type: 'SET_DATA', payload: { key: 'activeChatId', value: null } });
+    const handleDeleteSavedChat = async (id: string) => {
+        try {
+            await apiFetch(`/api/chats/${id}`, { method: 'DELETE' });
+            setSavedChats(chats.filter(c => c.id !== id));
+            if (state.activeChatId === id) {
+                dispatch({ type: 'SET_DATA', payload: { key: 'activeChatId', value: null } });
+            }
+            showNotification("Conversazione eliminata dallo storico.");
+        } catch (e: any) {
+            showNotification(e.message, "error");
         }
-        showNotification("Conversazione eliminata dallo storico.");
     };
 
-    const handleUpdateTrip = (updatedTrip: SavedTrip) => {
-        setTrips(trips.map(t => t.id === updatedTrip.id ? updatedTrip : t));
+    const handleUpdateTrip = async (updatedTrip: SavedTrip) => {
+        try {
+            await apiFetch('/api/trips', { method: 'POST', body: JSON.stringify(updatedTrip) });
+            setTrips(trips.map(t => t.id === updatedTrip.id ? updatedTrip : t));
+        } catch (e: any) {
+            showNotification(e.message, "error");
+        }
     };
 
     const handleGenerateDiarySummary = async (trip: SavedTrip) => {
@@ -633,7 +816,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             handleDeleteReminder, handleSaveOrUpdateDiagnosis, handleLoadDiagnosis, handleDeleteDiagnosis,
             handleDownloadDiagnosisPdf, handleDownloadChecklistPdf, handleGenerateSpecs,
             handleUpdateTrip, handleGenerateDiarySummary, handleDownloadDiaryPdf,
-            handleClearActiveChat, handleSaveCurrentChat, handleLoadChatHistory, handleDeleteSavedChat
+            handleClearActiveChat, handleSaveCurrentChat, handleLoadChatHistory, handleDeleteSavedChat,
+            login, register, logout, checkAuth
         }}>
             {children}
         </AppContext.Provider>

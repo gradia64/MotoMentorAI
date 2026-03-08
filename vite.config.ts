@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
     define: {
       // Inietta il valore della chiave API nel codice frontend sostituendo la stringa 'process.env.API_KEY'
       'process.env.API_KEY': JSON.stringify(apiKey),
+      'process.env.GEMINI_API_KEY': JSON.stringify(apiKey),
       // Definisce process.env come oggetto vuoto per evitare crash di librerie terze che lo richiedono,
       // ma senza sovrascrivere la definizione specifica di API_KEY sopra.
       'process.env': {}

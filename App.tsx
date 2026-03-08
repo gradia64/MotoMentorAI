@@ -1,6 +1,6 @@
 
-import React, { Suspense, lazy } from 'react';
-import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, ClockIcon, BookOpenIcon } from '@heroicons/react/24/outline';
+import React, { Suspense, lazy, useEffect } from 'react';
+import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, ClockIcon, BookOpenIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 
 import { AiMode } from './types';
@@ -8,6 +8,7 @@ import { AppProvider, useAppContext } from './state/AppContext';
 import TabButton from './components/TabButton';
 import Notification from './components/Notification';
 import Logo from './components/Logo';
+import Login from './components/Login';
 
 // --- Lazy Loading of Feature Components ---
 // This enables Code Splitting: each feature is bundled separately and 
@@ -34,17 +35,43 @@ const SectionLoader: React.FC = () => (
 );
 
 const AppContent: React.FC = () => {
-    const { state, dispatch } = useAppContext();
+    const { state, dispatch, checkAuth, logout } = useAppContext();
+
+    useEffect(() => {
+        checkAuth();
+    }, []);
 
     const setMode = (mode: AiMode) => dispatch({ type: 'SET_MODE', payload: mode });
+
+    if (state.isCheckingAuth) {
+        return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Caricamento...</div>;
+    }
+
+    if (!state.isAuthenticated) {
+        return <Login />;
+    }
 
     return (
         <div className="bg-gray-900 text-white min-h-screen font-sans">
             <Notification />
             <header className="bg-gray-800 shadow-md sticky top-0 z-10">
-                <div className="container mx-auto px-4 py-4 flex justify-center items-center gap-4">
-                    <Logo className="w-10 h-10 md:w-12 md:h-12 drop-shadow-md" />
-                    <h1 className="text-3xl font-bold tracking-tight text-white">MotoMentor AI</h1>
+                <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                        <Logo className="w-10 h-10 md:w-12 md:h-12 drop-shadow-md" />
+                        <h1 className="text-3xl font-bold tracking-tight text-white">MotoMentor AI</h1>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="text-sm text-gray-400 hidden sm:block">
+                            Ciao, {state.user?.username}
+                        </div>
+                        <button 
+                            onClick={logout}
+                            className="text-gray-400 hover:text-white transition-colors"
+                            title="Esci"
+                        >
+                            <ArrowRightOnRectangleIcon className="w-6 h-6" />
+                        </button>
+                    </div>
                 </div>
             </header>
 
