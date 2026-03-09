@@ -195,7 +195,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     
     // Rimuoviamo useLocalStorage e usiamo lo stato locale che verrà popolato dalle API
     const [garage, setGarage] = React.useState<GarageVehicle[]>([]);
-    const [activeVehId, setActiveVehId] = React.useState<string | null>(null);
+    const [activeVehId, setActiveVehId] = React.useState<string | null>(() => {
+        return localStorage.getItem('motomentor_active_vehicle') || null;
+    });
     const [trips, setTrips] = React.useState<SavedTrip[]>([]);
     const [diagnoses, setDiagnoses] = React.useState<SavedDiagnosis[]>([]);
     const [mLog, setMLog] = React.useState<MaintenanceRecord[]>([]);
@@ -333,7 +335,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             await apiFetch(`/api/garage/${id}`, { method: 'DELETE' });
             setGarage(garage.filter(v => v.id !== id));
-            if (activeVehId === id) setActiveVehId(null);
+            if (activeVehId === id) {
+                setActiveVehId(null);
+                localStorage.removeItem('motomentor_active_vehicle');
+            }
             showNotification("Veicolo rimosso.");
         } catch (e: any) {
             showNotification(e.message, "error");
@@ -342,6 +347,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const handleSetActiveVehicle = (id: string) => {
         setActiveVehId(id);
+        localStorage.setItem('motomentor_active_vehicle', id);
         showNotification("Moto selezionata come attiva!");
     };
 

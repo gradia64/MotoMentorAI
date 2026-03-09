@@ -411,7 +411,7 @@ const Garage: React.FC = () => {
                                             {/* Tech Specs Badges */}
                                             {(v.displacement || v.power) && (
                                                 <div className="mt-2 flex gap-2">
-                                                    {v.displacement && <span className="text-xs bg-gray-700 px-2 py-0.5 rounded text-gray-300">{v.displacement} cc</span>}
+                                                    {v.displacement && <span className="text-xs bg-gray-700 px-2 py-0.5 rounded text-gray-300">{v.displacement.toLowerCase().includes('cc') ? v.displacement : `${v.displacement} cc`}</span>}
                                                     {v.power && <span className="text-xs bg-gray-700 px-2 py-0.5 rounded text-gray-300">{v.power}</span>}
                                                 </div>
                                             )}
