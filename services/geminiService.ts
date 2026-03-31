@@ -104,14 +104,28 @@ const mapApiItineraryToAppItinerary = (apiResponse: any): Itinerary => {
 };
 
 export const generateItinerary = async (options: any): Promise<Itinerary> => {
-    const { departure, destination, tourName, duration, roadPreference, period, motorcycle, customPrompt } = options;
+    const { 
+        tripType,
+        departure, 
+        destination, 
+        selectedTour, 
+        duration, 
+        roadPreference, 
+        customRoadPreferenceText,
+        period, 
+        motorcycle, 
+        customPrompt 
+    } = options;
+    
+    const roadPref = roadPreference === 'Percorso personalizzato' ? customRoadPreferenceText : roadPreference;
     
     const prompt = `Agisci come MotoMentor, esperto di mototurismo.
-Pianifica un itinerario di ${duration} giorni ${tourName ? `denominato "${tourName}"` : `da ${departure} a ${destination}`}.
-Periodo: ${period}. Strade: ${roadPreference}.
+Pianifica un itinerario di ${duration} giorni ${tripType === 'tour' ? `per il tour denominato "${selectedTour}"` : `da ${departure} a ${destination}`}.
+${tripType === 'tour' ? `Punto di partenza dell'utente: ${departure}.` : ''}
+Periodo: ${period}. Preferenza strade: ${roadPref}.
 ${motorcycle ? `Veicolo: ${motorcycle.model} (${motorcycle.year}).` : ''}
 FILOSOFIA: Massima precisione geografica, strade panoramiche, tappe bilanciate.
-Richieste: ${customPrompt || 'Nessuna'}.
+Richieste aggiuntive: ${customPrompt || 'Nessuna'}.
 
 REGOLE JSON: Restituisci esclusivamente l'oggetto JSON richiesto secondo ITINERARY_SCHEMA.`;
 

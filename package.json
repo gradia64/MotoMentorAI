@@ -6,7 +6,8 @@
     "dev": "tsx api/index.ts",
     "start": "node api/index.ts",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "*",
