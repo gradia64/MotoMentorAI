@@ -9,6 +9,7 @@ import { auth, db } from '../src/firebase';
 import { 
     onAuthStateChanged, 
     signInWithPopup, 
+    signInWithRedirect,
     GoogleAuthProvider, 
     signOut,
     User as FirebaseUser
@@ -368,9 +369,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
             return result.user;
         } catch (error: any) {
-            console.error("Errore login Google:", error);
+            console.error("Errore login Google (Popup):", error);
             showNotification(error.message, "error");
             throw error; // Re-throw so the UI can handle it
+        }
+    };
+
+    const loginWithGoogleRedirect = async () => {
+        const provider = new GoogleAuthProvider();
+        try {
+            await signInWithRedirect(auth, provider);
+        } catch (error: any) {
+            console.error("Errore login Google (Redirect):", error);
+            showNotification(error.message, "error");
+            throw error;
         }
     };
 
@@ -905,7 +917,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             handleDownloadDiagnosisPdf, handleDownloadChecklistPdf, handleGenerateSpecs,
             handleUpdateTrip, handleGenerateDiarySummary, handleDownloadDiaryPdf,
             handleClearActiveChat, handleSaveCurrentChat, handleLoadChatHistory, handleDeleteSavedChat,
-            loginWithGoogle, logout, checkAuth
+            loginWithGoogle, loginWithGoogleRedirect, logout, checkAuth
         }}>
             {children}
         </AppContext.Provider>

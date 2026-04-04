@@ -3,7 +3,7 @@ import { useAppContext } from '../state/AppContext';
 import Logo from './Logo';
 
 export const Login: React.FC = () => {
-    const { loginWithGoogle } = useAppContext();
+    const { loginWithGoogle, loginWithGoogleRedirect } = useAppContext();
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -13,6 +13,20 @@ export const Login: React.FC = () => {
         try {
             await loginWithGoogle();
         } catch (err: any) {
+            console.error("Errore login Google (Popup):", err);
+            setError(err.message || "Si è verificato un errore durante l'accesso con Google");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleGoogleLoginRedirect = async () => {
+        setError('');
+        setLoading(true);
+        try {
+            await loginWithGoogleRedirect();
+        } catch (err: any) {
+            console.error("Errore login Google (Redirect):", err);
             setError(err.message || "Si è verificato un errore durante l'accesso con Google");
         } finally {
             setLoading(false);
@@ -38,9 +52,11 @@ export const Login: React.FC = () => {
                             <div className="bg-red-900/50 border border-red-500 text-red-200 p-3 rounded text-sm space-y-2">
                                 <p className="font-bold">Errore di accesso:</p>
                                 <p>{error}</p>
-                                <p className="text-xs opacity-80">
-                                    Assicurati che i popup non siano bloccati dal browser o prova ad aprire l'app in una nuova scheda.
-                                </p>
+                                <div className="text-xs opacity-80 space-y-1">
+                                    <p>Dominio corrente: <code className="bg-black/30 px-1 rounded">{window.location.hostname}</code></p>
+                                    <p>Assicurati che questo dominio sia in "Authorized domains" su Firebase.</p>
+                                    <p>Se il problema persiste, prova ad aprire l'app in una nuova scheda o usa una finestra in incognito.</p>
+                                </div>
                             </div>
                         )}
                         
@@ -75,6 +91,13 @@ export const Login: React.FC = () => {
                                         Accedi con Google
                                     </>
                                 )}
+                            </button>
+                            <button
+                                onClick={handleGoogleLoginRedirect}
+                                disabled={loading}
+                                className="mt-3 w-full flex justify-center items-center gap-3 py-2 px-4 border border-transparent rounded-md text-xs font-medium text-gray-400 hover:text-white hover:bg-gray-700/50 focus:outline-none transition-all"
+                            >
+                                Problemi con il popup? Prova il redirect
                             </button>
                         </div>
                     </div>
