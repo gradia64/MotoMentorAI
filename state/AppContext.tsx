@@ -3,9 +3,79 @@ import React, { createContext, useReducer, useContext, useEffect, ReactNode, use
 import { Chat, Content, GenerateContentResponse } from '@google/genai';
 import { generateItinerary, diagnoseProblem, getMaintenanceTips, createChatSession, getVehicleSpecs, generateTripDiarySummary } from '../services/geminiService';
 import { Itinerary, MaintenanceTips, GarageVehicle, AiMode, SavedTrip, MaintenanceRecord, MaintenanceReminder, SavedDiagnosis, DiaryEntry, MaintenanceType, SavedChat } from '../types';
-import { useLocalStorage } from '../utils/hooks';
 import { generatePdf } from '../utils/pdf';
 import { downloadFile } from '../utils/mapsHelpers';
+import { auth, db } from '../src/firebase';
+import { 
+    onAuthStateChanged, 
+    signInWithPopup, 
+    GoogleAuthProvider, 
+    signOut,
+    User as FirebaseUser
+} from 'firebase/auth';
+import { 
+    doc, 
+    setDoc, 
+    getDoc, 
+    getDocs, 
+    collection, 
+    deleteDoc, 
+    onSnapshot, 
+    query, 
+    orderBy,
+    getDocFromServer
+} from 'firebase/firestore';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: any, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 interface Notification {
     message: string;
@@ -193,7 +263,6 @@ const AppContext = createContext<any>(undefined);
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
     
-    // Rimuoviamo useLocalStorage e usiamo lo stato locale che verrà popolato dalle API
     const [garage, setGarage] = React.useState<GarageVehicle[]>([]);
     const [activeVehId, setActiveVehId] = React.useState<string | null>(() => {
         return localStorage.getItem('motomentor_active_vehicle') || null;
@@ -204,144 +273,138 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [mReminders, setMReminders] = React.useState<MaintenanceReminder[]>([]);
     const [chats, setSavedChats] = React.useState<SavedChat[]>([]);
 
-    const getToken = () => localStorage.getItem('motomentor_token');
-    const setToken = (token: string) => localStorage.setItem('motomentor_token', token);
-    const removeToken = () => localStorage.removeItem('motomentor_token');
-
-    const apiFetch = async (url: string, options: RequestInit = {}) => {
-        const token = getToken();
-        const headers: any = {
-            'Content-Type': 'application/json',
-            ...options.headers,
-        };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        
-        const res = await fetch(url, { ...options, headers });
-        if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            throw new Error(errorData.error || `API Error: ${res.status}`);
-        }
-        return res.json();
-    };
-
-    const loadUserData = async () => {
-        try {
-            const [g, t, d, m, r, c] = await Promise.all([
-                apiFetch('/api/garage'),
-                apiFetch('/api/trips'),
-                apiFetch('/api/diagnoses'),
-                apiFetch('/api/maintenance'),
-                apiFetch('/api/reminders'),
-                apiFetch('/api/chats')
-            ]);
-            setGarage(g);
-            setTrips(t);
-            setDiagnoses(d);
-            setMLog(m);
-            setMReminders(r);
-            setSavedChats(c);
-        } catch (e) {
-            console.error("Failed to load user data", e);
-        }
-    };
-
-    const checkAuth = async () => {
-        dispatch({ type: 'SET_CHECKING_AUTH', payload: true });
-        const token = getToken();
-        if (token) {
-            try {
-                const { user } = await apiFetch('/api/auth/me');
-                dispatch({ type: 'SET_AUTH', payload: { user, isAuthenticated: true } });
-                await loadUserData();
-            } catch (e) {
-                removeToken();
-                dispatch({ type: 'SET_AUTH', payload: { user: null, isAuthenticated: false } });
-            }
-        } else {
-            dispatch({ type: 'SET_AUTH', payload: { user: null, isAuthenticated: false } });
-        }
-        dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
-    };
-
-    const login = async (username: string, password: string) => {
-        const data = await apiFetch('/api/auth/login', {
-            method: 'POST',
-            body: JSON.stringify({ username, password })
-        });
-        setToken(data.token);
-        dispatch({ type: 'SET_AUTH', payload: { user: data.user, isAuthenticated: true } });
-        await loadUserData();
-    };
-
-    const register = async (username: string, password: string) => {
-        const data = await apiFetch('/api/auth/register', {
-            method: 'POST',
-            body: JSON.stringify({ username, password })
-        });
-        setToken(data.token);
-        dispatch({ type: 'SET_AUTH', payload: { user: data.user, isAuthenticated: true } });
-        await loadUserData();
-    };
-
-    const logout = () => {
-        removeToken();
-        dispatch({ type: 'SET_AUTH', payload: { user: null, isAuthenticated: false } });
-        setGarage([]);
-        setTrips([]);
-        setDiagnoses([]);
-        setMLog([]);
-        setMReminders([]);
-        setSavedChats([]);
-    };
-
     useEffect(() => {
-        dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: garage } });
-        const active = garage.find(v => v.id === activeVehId) || null;
-        dispatch({ type: 'SET_DATA', payload: { key: 'activeVehicle', value: active } });
-    }, [garage, activeVehId]);
-
-    useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: trips } }); }, [trips]);
-    useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: diagnoses } }); }, [diagnoses]);
-    useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: mLog } }); }, [mLog]);
-    useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: mReminders } }); }, [mReminders]);
-    useEffect(() => { dispatch({ type: 'SET_DATA', payload: { key: 'savedChats', value: chats } }); }, [chats]);
-
-    const showNotification = useCallback((message: string, type: 'success' | 'error' | 'warning' = 'success') => {
-        dispatch({ type: 'SET_NOTIFICATION', payload: { message, type } });
+        async function testConnection() {
+            try {
+                await getDocFromServer(doc(db, 'test', 'connection'));
+            } catch (error) {
+                if(error instanceof Error && error.message.includes('the client is offline')) {
+                    console.error("Please check your Firebase configuration. ");
+                }
+            }
+        }
+        testConnection();
     }, []);
 
-    const handleAddVehicle = async (v: any) => {
-        const newVeh = { ...v, id: crypto.randomUUID() };
+    const showNotification = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+        dispatch({ type: 'SET_NOTIFICATION', payload: { message, type } });
+        setTimeout(() => {
+            dispatch({ type: 'SET_NOTIFICATION', payload: null });
+        }, 5000);
+    };
+
+    const checkAuth = () => {
+        dispatch({ type: 'SET_CHECKING_AUTH', payload: true });
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                dispatch({ type: 'SET_AUTH', payload: { 
+                    user: { id: user.uid, username: user.displayName || user.email?.split('@')[0] || 'Utente' }, 
+                    isAuthenticated: true 
+                } });
+                
+                // Set up real-time listeners
+                const userId = user.uid;
+                
+                const garageUnsub = onSnapshot(collection(db, `users/${userId}/vehicles`), (snapshot) => {
+                    setGarage(snapshot.docs.map(doc => doc.data() as GarageVehicle));
+                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/vehicles`));
+
+                const tripsUnsub = onSnapshot(query(collection(db, `users/${userId}/trips`)), (snapshot) => {
+                    setTrips(snapshot.docs.map(doc => doc.data().data as SavedTrip));
+                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/trips`));
+
+                const diagnosesUnsub = onSnapshot(collection(db, `users/${userId}/diagnoses`), (snapshot) => {
+                    setDiagnoses(snapshot.docs.map(doc => doc.data().data as SavedDiagnosis));
+                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/diagnoses`));
+
+                const maintenanceUnsub = onSnapshot(collection(db, `users/${userId}/maintenance`), (snapshot) => {
+                    setMLog(snapshot.docs.map(doc => doc.data().data as MaintenanceRecord));
+                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/maintenance`));
+
+                const remindersUnsub = onSnapshot(collection(db, `users/${userId}/reminders`), (snapshot) => {
+                    setMReminders(snapshot.docs.map(doc => doc.data().data as MaintenanceReminder));
+                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/reminders`));
+
+                const chatsUnsub = onSnapshot(collection(db, `users/${userId}/chats`), (snapshot) => {
+                    setSavedChats(snapshot.docs.map(doc => doc.data().data as SavedChat));
+                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/chats`));
+
+                dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
+
+                return () => {
+                    garageUnsub();
+                    tripsUnsub();
+                    diagnosesUnsub();
+                    maintenanceUnsub();
+                    remindersUnsub();
+                    chatsUnsub();
+                };
+            } else {
+                dispatch({ type: 'SET_AUTH', payload: { user: null, isAuthenticated: false } });
+                dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
+                setGarage([]);
+                setTrips([]);
+                setDiagnoses([]);
+                setMLog([]);
+                setMReminders([]);
+                setSavedChats([]);
+            }
+        });
+    };
+
+    const loginWithGoogle = async () => {
+        const provider = new GoogleAuthProvider();
         try {
-            await apiFetch('/api/garage', { method: 'POST', body: JSON.stringify(newVeh) });
-            setGarage([...garage, newVeh]);
+            await signInWithPopup(auth, provider);
+        } catch (error: any) {
+            showNotification(error.message, "error");
+        }
+    };
+
+    const logout = async () => {
+        try {
+            await signOut(auth);
+            localStorage.removeItem('motomentor_active_vehicle');
+        } catch (error: any) {
+            showNotification(error.message, "error");
+        }
+    };
+
+    const handleAddVehicle = async (v: any) => {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
+        const newVeh = { ...v, id: crypto.randomUUID(), userId };
+        try {
+            await setDoc(doc(db, `users/${userId}/vehicles`, newVeh.id), newVeh);
             showNotification("Moto aggiunta al garage!");
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/vehicles/${newVeh.id}`);
         }
     };
 
     const handleUpdateVehicle = async (updated: GarageVehicle) => {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
         try {
-            await apiFetch('/api/garage', { method: 'PUT', body: JSON.stringify(updated) });
-            setGarage(garage.map(v => v.id === updated.id ? updated : v));
+            await setDoc(doc(db, `users/${userId}/vehicles`, updated.id), updated);
             showNotification("Dati veicolo aggiornati.");
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/vehicles/${updated.id}`);
         }
     };
 
     const handleDeleteVehicle = async (id: string) => {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
         try {
-            await apiFetch(`/api/garage/${id}`, { method: 'DELETE' });
-            setGarage(garage.filter(v => v.id !== id));
+            await deleteDoc(doc(db, `users/${userId}/vehicles`, id));
             if (activeVehId === id) {
                 setActiveVehId(null);
                 localStorage.removeItem('motomentor_active_vehicle');
             }
             showNotification("Veicolo rimosso.");
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/vehicles/${id}`);
         }
     };
 
@@ -378,6 +441,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const saveItinerary = useCallback(async () => {
         if (!state.itinerary) return;
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
 
         const existingTrip = state.activeTripId ? trips.find(t => t.id === state.activeTripId) : null;
 
@@ -397,11 +462,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             };
             
             try {
-                await apiFetch('/api/trips', { method: 'POST', body: JSON.stringify(updatedTrip) });
-                setTrips(trips.map(t => t.id === state.activeTripId ? updatedTrip : t));
+                await setDoc(doc(db, `users/${userId}/trips`, updatedTrip.id), { id: updatedTrip.id, userId, data: updatedTrip });
                 showNotification("Viaggio aggiornato nello storico.");
             } catch (e: any) {
-                showNotification(e.message, "error");
+                handleFirestoreError(e, OperationType.WRITE, `users/${userId}/trips/${updatedTrip.id}`);
             }
             return;
         }
@@ -414,12 +478,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             diaryEntries: []
         };
         try {
-            await apiFetch('/api/trips', { method: 'POST', body: JSON.stringify(newTrip) });
-            setTrips([newTrip, ...trips]);
+            await setDoc(doc(db, `users/${userId}/trips`, newId), { id: newId, userId, data: newTrip });
             dispatch({ type: 'SET_DATA', payload: { key: 'activeTripId', value: newId } });
             showNotification("Viaggio salvato nello storico.");
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/trips/${newId}`);
         }
     }, [state.itinerary, state.activeTripId, state.drafts.tripPlanner, trips, showNotification]);
 
@@ -451,15 +514,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteTripFromHistory = async (id: string) => {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
         try {
-            await apiFetch(`/api/trips/${id}`, { method: 'DELETE' });
-            setTrips(trips.filter(t => t.id !== id));
+            await deleteDoc(doc(db, `users/${userId}/trips`, id));
             if (state.activeTripId === id) {
                 dispatch({ type: 'SET_DATA', payload: { key: 'activeTripId', value: null } });
             }
             showNotification("Viaggio eliminato.");
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/trips/${id}`);
         }
     };
 
@@ -507,46 +571,52 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const handleAddMaintenanceRecord = async (record: Omit<MaintenanceRecord, 'id'>) => {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
         const newRecord = { ...record, id: crypto.randomUUID() };
         try {
-            await apiFetch('/api/maintenance', { method: 'POST', body: JSON.stringify(newRecord) });
-            setMLog([newRecord, ...mLog]);
+            await setDoc(doc(db, `users/${userId}/maintenance`, newRecord.id), { id: newRecord.id, userId, data: newRecord });
             showNotification("Intervento registrato.");
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/maintenance/${newRecord.id}`);
         }
     };
 
     const handleDeleteMaintenanceRecord = async (id: string) => {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
         try {
-            await apiFetch(`/api/maintenance/${id}`, { method: 'DELETE' });
-            setMLog(mLog.filter(l => l.id !== id));
+            await deleteDoc(doc(db, `users/${userId}/maintenance`, id));
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/maintenance/${id}`);
         }
     };
 
     const handleAddReminder = async (r: Omit<MaintenanceReminder, 'id'>) => {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
         const newReminder = { ...r, id: crypto.randomUUID() };
         try {
-            await apiFetch('/api/reminders', { method: 'POST', body: JSON.stringify(newReminder) });
-            setMReminders([...mReminders, newReminder]);
+            await setDoc(doc(db, `users/${userId}/reminders`, newReminder.id), { id: newReminder.id, userId, data: newReminder });
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/reminders/${newReminder.id}`);
         }
     };
 
     const handleDeleteReminder = async (id: string) => {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
         try {
-            await apiFetch(`/api/reminders/${id}`, { method: 'DELETE' });
-            setMReminders(mReminders.filter(r => r.id !== id));
+            await deleteDoc(doc(db, `users/${userId}/reminders`, id));
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/reminders/${id}`);
         }
     };
 
     const handleSaveOrUpdateDiagnosis = async () => {
         if (!state.diagnosis) return;
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
         const diag: SavedDiagnosis = {
             id: state.activeDiagnosisId || crypto.randomUUID(),
             vehicleId: state.activeVehicle!.id,
@@ -555,15 +625,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             diagnosisText: state.diagnosis
         };
         try {
-            await apiFetch('/api/diagnoses', { method: 'POST', body: JSON.stringify(diag) });
-            if (state.activeDiagnosisId) {
-                setDiagnoses(diagnoses.map(d => d.id === diag.id ? diag : d));
-            } else {
-                setDiagnoses([diag, ...diagnoses]);
-            }
+            await setDoc(doc(db, `users/${userId}/diagnoses`, diag.id), { id: diag.id, userId, data: diag });
             showNotification("Diagnosi salvata.");
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/diagnoses/${diag.id}`);
         }
     };
 
@@ -576,11 +641,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const handleDeleteDiagnosis = async (id: string) => {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
         try {
-            await apiFetch(`/api/diagnoses/${id}`, { method: 'DELETE' });
-            setDiagnoses(diagnoses.filter(d => d.id !== id));
+            await deleteDoc(doc(db, `users/${userId}/diagnoses`, id));
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/diagnoses/${id}`);
         }
     };
 
@@ -626,6 +692,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return;
         }
 
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
+
         if (state.activeChatId) {
             // Aggiorna chat esistente
             const updatedChat = {
@@ -634,11 +703,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 timestamp: new Date().toISOString()
             };
             try {
-                await apiFetch('/api/chats', { method: 'POST', body: JSON.stringify(updatedChat) });
-                setSavedChats(chats.map(c => c.id === state.activeChatId ? updatedChat : c));
+                await setDoc(doc(db, `users/${userId}/chats`, updatedChat.id), { id: updatedChat.id, userId, data: updatedChat });
                 showNotification("Conversazione aggiornata nello storico.");
             } catch (e: any) {
-                showNotification(e.message, "error");
+                handleFirestoreError(e, OperationType.WRITE, `users/${userId}/chats/${updatedChat.id}`);
             }
         } else {
             // Crea nuova chat
@@ -650,12 +718,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 history: [...state.chatHistory]
             };
             try {
-                await apiFetch('/api/chats', { method: 'POST', body: JSON.stringify(newChat) });
-                setSavedChats([newChat, ...chats]);
+                await setDoc(doc(db, `users/${userId}/chats`, newId), { id: newId, userId, data: newChat });
                 dispatch({ type: 'SET_DATA', payload: { key: 'activeChatId', value: newId } });
                 showNotification("Conversazione salvata nello storico.");
             } catch (e: any) {
-                showNotification(e.message, "error");
+                handleFirestoreError(e, OperationType.WRITE, `users/${userId}/chats/${newId}`);
             }
         }
     };
@@ -671,24 +738,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const handleDeleteSavedChat = async (id: string) => {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
         try {
-            await apiFetch(`/api/chats/${id}`, { method: 'DELETE' });
-            setSavedChats(chats.filter(c => c.id !== id));
+            await deleteDoc(doc(db, `users/${userId}/chats`, id));
             if (state.activeChatId === id) {
                 dispatch({ type: 'SET_DATA', payload: { key: 'activeChatId', value: null } });
             }
             showNotification("Conversazione eliminata dallo storico.");
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/chats/${id}`);
         }
     };
 
     const handleUpdateTrip = async (updatedTrip: SavedTrip) => {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
         try {
-            await apiFetch('/api/trips', { method: 'POST', body: JSON.stringify(updatedTrip) });
-            setTrips(trips.map(t => t.id === updatedTrip.id ? updatedTrip : t));
+            await setDoc(doc(db, `users/${userId}/trips`, updatedTrip.id), { id: updatedTrip.id, userId, data: updatedTrip });
         } catch (e: any) {
-            showNotification(e.message, "error");
+            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/trips/${updatedTrip.id}`);
         }
     };
 
@@ -823,7 +892,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             handleDownloadDiagnosisPdf, handleDownloadChecklistPdf, handleGenerateSpecs,
             handleUpdateTrip, handleGenerateDiarySummary, handleDownloadDiaryPdf,
             handleClearActiveChat, handleSaveCurrentChat, handleLoadChatHistory, handleDeleteSavedChat,
-            login, register, logout, checkAuth
+            loginWithGoogle, logout, checkAuth
         }}>
             {children}
         </AppContext.Provider>

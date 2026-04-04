@@ -80,7 +80,7 @@ const VirtualMechanic: React.FC = () => {
         }
     };
     
-    const vehicleDiagnoses = activeVehicle ? savedDiagnoses.filter(d => d.vehicleId === activeVehicle.id) : [];
+    const vehicleDiagnoses = activeVehicle ? savedDiagnoses.filter((d: any) => d.vehicleId === activeVehicle.id) : [];
     
     // Determine the loading state based on the current mode
     const isLoading = mechanicMode === 'diagnose' ? isDiagnosingProblem : isGeneratingChecklist;

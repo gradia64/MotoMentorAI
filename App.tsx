@@ -79,7 +79,7 @@ const AppContent: React.FC = () => {
                 {/* GLOBAL ALERTS SECTION */}
                 {state.deadlineAlerts.length > 0 && (
                      <div className="mb-6 space-y-2 animate-fade-in-up">
-                        {state.deadlineAlerts.map((alert, index) => (
+                        {state.deadlineAlerts.map((alert: any, index: number) => (
                             <div 
                                 key={`${alert.vehicleId}-${alert.type}`} 
                                 className={`p-3 rounded-lg flex items-center gap-3 border ${

@@ -125,11 +125,11 @@ const AiChat: React.FC = () => {
                 )}
 
                 <div className="space-y-4">
-                    {chatHistory.map((msg, index) => (
+                    {chatHistory.map((msg: any, index: number) => (
                         <div key={index} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             {msg.role === 'model' && <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0"><SparklesIcon className="w-5 h-5 text-white"/></div>}
                             <div className={`max-w-[85%] p-3 rounded-2xl whitespace-pre-wrap ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none shadow-md' : 'bg-gray-800 text-gray-300 rounded-bl-none border border-gray-700 shadow-sm'}`}>
-                                {renderText(msg.parts.map(p => p.text).join(''))}
+                                {renderText(msg.parts.map((p: any) => p.text).join(''))}
                             </div>
                         </div>
                     ))}

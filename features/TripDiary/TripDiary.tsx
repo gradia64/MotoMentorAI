@@ -21,12 +21,12 @@ const TripDiary: React.FC = () => {
     const [currentNote, setCurrentNote] = useState<string>('');
     const [unsavedChanges, setUnsavedChanges] = useState(false);
 
-    const activeTrip = tripHistory.find(t => t.id === activeDiaryTripId);
+    const activeTrip = tripHistory.find((t: any) => t.id === activeDiaryTripId);
 
     // Effect to update local state when active trip or day changes
     useEffect(() => {
         if (activeTrip) {
-            const entry = activeTrip.diaryEntries?.find(e => e.day === selectedDay);
+            const entry = activeTrip.diaryEntries?.find((e: any) => e.day === selectedDay);
             setCurrentNote(entry?.content || '');
             setUnsavedChanges(false);
         }
@@ -46,7 +46,7 @@ const TripDiary: React.FC = () => {
         if (!activeTrip) return;
 
         const currentEntries = activeTrip.diaryEntries || [];
-        const otherEntries = currentEntries.filter(e => e.day !== selectedDay);
+        const otherEntries = currentEntries.filter((e: any) => e.day !== selectedDay);
         
         const newEntry: DiaryEntry = {
             day: selectedDay,
@@ -83,7 +83,7 @@ const TripDiary: React.FC = () => {
                     onChange={handleTripSelect}
                 >
                     <option value="" disabled>-- Scegli un viaggio --</option>
-                    {tripHistory.map(trip => (
+                    {tripHistory.map((trip: any) => (
                         <option key={trip.id} value={trip.id}>{trip.itinerary.tripTitle}</option>
                     ))}
                 </SelectField>
@@ -97,8 +97,8 @@ const TripDiary: React.FC = () => {
                             <BookOpenIcon className="w-5 h-5 text-blue-400"/> Tappe del Viaggio
                         </h3>
                         <div className="space-y-2">
-                            {activeTrip.itinerary.dailySchedule.map(day => {
-                                const hasEntry = activeTrip.diaryEntries?.some(e => e.day === day.day && e.content.trim().length > 0);
+                            {activeTrip.itinerary.dailySchedule.map((day: any) => {
+                                const hasEntry = activeTrip.diaryEntries?.some((e: any) => e.day === day.day && e.content.trim().length > 0);
                                 return (
                                     <button
                                         key={day.day}

@@ -381,7 +381,7 @@ const Garage: React.FC = () => {
                 <p className="text-gray-400">Nessun veicolo nel garage.</p>
             ) : (
                 <div className="grid grid-cols-1 gap-6">
-                    {garageVehicles.map(v => {
+                    {garageVehicles.map((v: any) => {
                         const isActive = v.id === activeVehicle?.id;
                         return (
                             <div key={v.id} className={`rounded-lg flex flex-col md:flex-row overflow-hidden transition-all duration-300 ${isActive ? 'bg-blue-900/20 ring-2 ring-blue-500 shadow-lg shadow-blue-900/20' : 'bg-gray-800 opacity-90 hover:opacity-100 hover:bg-gray-700'}`}>

@@ -183,29 +183,29 @@ const TripPlanner: React.FC = () => {
         if (!itinerary) return;
         const quickViewAction = () => {
              const dailyDestinations = itinerary.dailySchedule
-                .map(day => day.gpxTrack?.[day.gpxTrack.length - 1])
-                .filter((p): p is GpxPoint => !!p);
+                .map((day: any) => day.gpxTrack?.[day.gpxTrack.length - 1])
+                .filter((p: any): p is GpxPoint => !!p);
             if (dailyDestinations.length === 0) { alert("Dati GPS insufficienti."); return; }
             const origin = itinerary.dailySchedule[0]?.gpxTrack?.[0];
             if (!origin) { alert("Punto di partenza non trovato."); return; }
             const destination = dailyDestinations[dailyDestinations.length - 1];
             const intermediateWaypoints = dailyDestinations.slice(0, -1);
-            const waypointsStr = intermediateWaypoints.map(p => `${p.lat},${p.lon}`).join('|');
+            const waypointsStr = intermediateWaypoints.map((p: any) => `${p.lat},${p.lon}`).join('|');
             const url = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lon}&destination=${destination.lat},${destination.lon}&waypoints=${waypointsStr}&travelmode=driving`;
             window.open(url, '_blank');
         };
         const detailedNavAction = () => {
-            const allSegmentsRaw = itinerary.dailySchedule.flatMap(day => {
+            const allSegmentsRaw = itinerary.dailySchedule.flatMap((day: any) => {
                 const points = day.gpxTrack || [];
                 if (points.length < 2) return [];
                 return createNavigationSegments(points, { maxWaypointsPerSegment: 9 });
             });
-            const allSegments = allSegmentsRaw.map((segment, index) => ({ ...segment, segmentNumber: index + 1 }));
+            const allSegments = allSegmentsRaw.map((segment: any, index: number) => ({ ...segment, segmentNumber: index + 1 }));
             if (allSegments.length === 0) { alert("Nessun dato GPS navigabile."); return; }
             if (allSegments.length === 1 && allSegments[0]) {
                 window.open(allSegments[0].mapUrl, '_blank');
             } else {
-                allSegments.forEach((segment, index) => {
+                allSegments.forEach((segment: any, index: number) => {
                     setTimeout(() => window.open(segment.mapUrl, '_blank'), index * 500);
                 });
             }
@@ -333,7 +333,7 @@ const TripPlanner: React.FC = () => {
                         <div className="bg-yellow-500/20 text-yellow-300 p-4 rounded-md mb-6 shadow-lg" aria-live="polite">
                             <h4 className="font-bold flex items-center gap-2 text-yellow-200"><BellAlertIcon className="w-6 h-6"/> Attenzione Manutenzione!</h4>
                             <ul className="list-disc list-inside mt-2 ml-2 text-sm">
-                                {tripMaintenanceAlerts.map((alert, i) => <li key={i}>{alert}</li>)}
+                                {tripMaintenanceAlerts.map((alert: any, i: number) => <li key={i}>{alert}</li>)}
                             </ul>
                         </div>
                     )}
@@ -363,7 +363,7 @@ const TripPlanner: React.FC = () => {
                             </div>
                         </div>
                         <div className="space-y-4">
-                            {itinerary.dailySchedule.map((day, index) => (
+                            {itinerary.dailySchedule.map((day: any, index: number) => (
                                 <div key={index} className={`day-container ${index % 2 === 0 ? 'bg-gray-700/50' : 'bg-gray-600/50'} p-4 rounded-lg`}>
                                     <div className="flex justify-between items-start">
                                         <h3 className="text-xl font-semibold text-blue-400">Giorno {day.day}: {day.stageTitle}</h3>
@@ -389,7 +389,7 @@ const TripPlanner: React.FC = () => {
                                     <p className="text-gray-300 my-2">{day.routeDescription}</p>
                                     <h4 className="font-semibold text-gray-300 mt-3">Attività e Luoghi di Interesse:</h4>
                                     <ul className="list-disc list-inside text-gray-400 space-y-1 mt-1">
-                                        {day.activities.map((activity, i) => <li key={i}>{activity}</li>)}
+                                        {day.activities.map((activity: any, i: number) => <li key={i}>{activity}</li>)}
                                     </ul>
                                     <div className="mt-4 pt-4 border-t border-gray-600/50 space-y-2">
                                         <InfoBlock icon={ArrowsRightLeftIcon} title="Suggerimento Alternativo" content={day.alternativeRouteSuggestion} />
