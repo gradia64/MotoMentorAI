@@ -123,6 +123,7 @@ export interface AppState {
     diagnosis: string | null;
     activeDiagnosisId: string | null;
     activeChatId: string | null;
+    activeVehId: string | null;
     maintenanceTips: MaintenanceTips | null;
     activeDiaryTripId: string | null;
     chatSession: Chat | null;
@@ -200,6 +201,7 @@ const initialState: AppState = {
     diagnosis: null,
     activeDiagnosisId: null,
     activeChatId: null,
+    activeVehId: localStorage.getItem('motomentor_active_vehicle') || null,
     maintenanceTips: null,
     activeDiaryTripId: null,
     chatSession: null,
@@ -264,16 +266,6 @@ const AppContext = createContext<any>(undefined);
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
     
-    const [garage, setGarage] = React.useState<GarageVehicle[]>([]);
-    const [activeVehId, setActiveVehId] = React.useState<string | null>(() => {
-        return localStorage.getItem('motomentor_active_vehicle') || null;
-    });
-    const [trips, setTrips] = React.useState<SavedTrip[]>([]);
-    const [diagnoses, setDiagnoses] = React.useState<SavedDiagnosis[]>([]);
-    const [mLog, setMLog] = React.useState<MaintenanceRecord[]>([]);
-    const [mReminders, setMReminders] = React.useState<MaintenanceReminder[]>([]);
-    const [chats, setSavedChats] = React.useState<SavedChat[]>([]);
-
     useEffect(() => {
         async function testConnection() {
             try {
@@ -309,27 +301,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const userId = user.uid;
                 
                 const garageUnsub = onSnapshot(collection(db, `users/${userId}/vehicles`), (snapshot) => {
-                    setGarage(snapshot.docs.map(doc => doc.data() as GarageVehicle));
+                    dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: snapshot.docs.map(doc => doc.data() as GarageVehicle) } });
                 }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/vehicles`));
 
                 const tripsUnsub = onSnapshot(query(collection(db, `users/${userId}/trips`)), (snapshot) => {
-                    setTrips(snapshot.docs.map(doc => doc.data().data as SavedTrip));
+                    dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: snapshot.docs.map(doc => doc.data().data as SavedTrip) } });
                 }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/trips`));
 
                 const diagnosesUnsub = onSnapshot(collection(db, `users/${userId}/diagnoses`), (snapshot) => {
-                    setDiagnoses(snapshot.docs.map(doc => doc.data().data as SavedDiagnosis));
+                    dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: snapshot.docs.map(doc => doc.data().data as SavedDiagnosis) } });
                 }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/diagnoses`));
 
                 const maintenanceUnsub = onSnapshot(collection(db, `users/${userId}/maintenance`), (snapshot) => {
-                    setMLog(snapshot.docs.map(doc => doc.data().data as MaintenanceRecord));
+                    dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: snapshot.docs.map(doc => doc.data().data as MaintenanceRecord) } });
                 }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/maintenance`));
 
                 const remindersUnsub = onSnapshot(collection(db, `users/${userId}/reminders`), (snapshot) => {
-                    setMReminders(snapshot.docs.map(doc => doc.data().data as MaintenanceReminder));
+                    dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: snapshot.docs.map(doc => doc.data().data as MaintenanceReminder) } });
                 }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/reminders`));
 
                 const chatsUnsub = onSnapshot(collection(db, `users/${userId}/chats`), (snapshot) => {
-                    setSavedChats(snapshot.docs.map(doc => doc.data().data as SavedChat));
+                    dispatch({ type: 'SET_DATA', payload: { key: 'savedChats', value: snapshot.docs.map(doc => doc.data().data as SavedChat) } });
                 }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/chats`));
 
                 dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
@@ -345,12 +337,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             } else {
                 dispatch({ type: 'SET_AUTH', payload: { user: null, isAuthenticated: false } });
                 dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
-                setGarage([]);
-                setTrips([]);
-                setDiagnoses([]);
-                setMLog([]);
-                setMReminders([]);
-                setSavedChats([]);
+                dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: [] } });
+                dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: [] } });
+                dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: [] } });
+                dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: [] } });
+                dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: [] } });
+                dispatch({ type: 'SET_DATA', payload: { key: 'savedChats', value: [] } });
             }
         });
     };
@@ -423,8 +415,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (!userId) return;
         try {
             await deleteDoc(doc(db, `users/${userId}/vehicles`, id));
-            if (activeVehId === id) {
-                setActiveVehId(null);
+            if (state.activeVehId === id) {
+                dispatch({ type: 'SET_DATA', payload: { key: 'activeVehId', value: null } });
                 localStorage.removeItem('motomentor_active_vehicle');
             }
             showNotification("Veicolo rimosso.");
@@ -434,10 +426,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const handleSetActiveVehicle = (id: string) => {
-        setActiveVehId(id);
+        dispatch({ type: 'SET_DATA', payload: { key: 'activeVehId', value: id } });
         localStorage.setItem('motomentor_active_vehicle', id);
         showNotification("Moto selezionata come attiva!");
     };
+
+    // Derived state for active vehicle
+    useEffect(() => {
+        const active = state.garageVehicles.find(v => v.id === state.activeVehId) || null;
+        dispatch({ type: 'SET_DATA', payload: { key: 'activeVehicle', value: active } });
+    }, [state.garageVehicles, state.activeVehId]);
 
     const handleGenerateSpecs = async (model: string, year: string) => {
         try {
@@ -469,7 +467,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const userId = auth.currentUser?.uid;
         if (!userId) return;
 
-        const existingTrip = state.activeTripId ? trips.find(t => t.id === state.activeTripId) : null;
+        const existingTrip = state.activeTripId ? state.tripHistory.find((t: any) => t.id === state.activeTripId) : null;
 
         if (existingTrip) {
             const isUnchanged = JSON.stringify(existingTrip.inputs) === JSON.stringify(state.drafts.tripPlanner) &&
@@ -509,7 +507,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch (e: any) {
             handleFirestoreError(e, OperationType.WRITE, `users/${userId}/trips/${newId}`);
         }
-    }, [state.itinerary, state.activeTripId, state.drafts.tripPlanner, trips, showNotification]);
+    }, [state.itinerary, state.activeTripId, state.drafts.tripPlanner, state.tripHistory, showNotification]);
 
     const handleResetForm = useCallback(() => {
         dispatch({ type: 'RESET_TRIP_PLANNER_FORM' });
@@ -522,8 +520,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, [saveItinerary, handleResetForm]);
 
     const loadLastItinerary = () => {
-        if (trips.length > 0) {
-            const last = trips[0];
+        if (state.tripHistory.length > 0) {
+            const last = state.tripHistory[0];
             dispatch({ type: 'SET_ITINERARY', payload: { itinerary: last.itinerary, tripId: last.id } });
             dispatch({ type: 'UPDATE_TRIP_DRAFT', payload: last.inputs });
             showNotification("Caricato ultimo viaggio salvato.");
@@ -531,7 +529,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const loadTripFromHistory = (id: string) => {
-        const trip = trips.find(t => t.id === id);
+        const trip = state.tripHistory.find((t: any) => t.id === id);
         if (trip) {
             dispatch({ type: 'SET_ITINERARY', payload: { itinerary: trip.itinerary, tripId: trip.id } });
             dispatch({ type: 'UPDATE_TRIP_DRAFT', payload: trip.inputs });
@@ -553,7 +551,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const exportTripHistory = () => {
-        const data = JSON.stringify(trips, null, 2);
+        const data = JSON.stringify(state.tripHistory, null, 2);
         downloadFile(data, 'motomentor_viaggi.json', 'application/json');
     };
 
@@ -561,7 +559,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const text = await file.text();
         try {
             const imported = JSON.parse(text);
-            setTrips([...imported, ...trips]);
+            dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: [...imported, ...state.tripHistory] } });
             showNotification("Storico importato!");
         } catch (e) {
             showNotification("Errore importazione file.", "error");
@@ -583,7 +581,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } else {
             dispatch({ type: 'SET_CHECKLIST_GENERATING', payload: true });
             try {
-                const lastTrip = state.itinerary ? { tripTitle: state.itinerary.tripTitle, dailySchedule: state.itinerary.dailySchedule } as any : (trips.length > 0 ? trips[0].itinerary : null);
+                const lastTrip = state.itinerary ? { tripTitle: state.itinerary.tripTitle, dailySchedule: state.itinerary.dailySchedule } as any : (state.tripHistory.length > 0 ? state.tripHistory[0].itinerary : null);
                 if (!lastTrip) throw new Error("Devi avere almeno un viaggio pianificato o salvato.");
                 const tips = await getMaintenanceTips(lastTrip, state.activeVehicle!);
                 dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceTips', value: tips } });
@@ -658,7 +656,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const handleLoadDiagnosis = (id: string) => {
-        const d = diagnoses.find(x => x.id === id);
+        const d = state.savedDiagnoses.find((x: any) => x.id === id);
         if (d) {
             dispatch({ type: 'SET_DIAGNOSIS', payload: { diagnosis: d.diagnosisText, diagnosisId: d.id } });
             dispatch({ type: 'UPDATE_MECHANIC_DRAFT', payload: { problemDescription: d.problemDescription } });
@@ -723,7 +721,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (state.activeChatId) {
             // Aggiorna chat esistente
             const updatedChat = {
-                ...chats.find(c => c.id === state.activeChatId)!,
+                ...state.savedChats.find((c: any) => c.id === state.activeChatId)!,
                 history: [...state.chatHistory],
                 timestamp: new Date().toISOString()
             };
@@ -753,7 +751,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const handleLoadChatHistory = (id: string) => {
-        const chat = chats.find(c => c.id === id);
+        const chat = state.savedChats.find((c: any) => c.id === id);
         if (chat) {
             dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: chat.history } });
             dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: null } });
