@@ -294,8 +294,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const checkAuth = () => {
+        console.log("Inizio controllo autenticazione...");
         dispatch({ type: 'SET_CHECKING_AUTH', payload: true });
         onAuthStateChanged(auth, async (user) => {
+            console.log("Stato autenticazione cambiato:", user ? `Utente: ${user.uid}` : "Nessun utente");
             if (user) {
                 dispatch({ type: 'SET_AUTH', payload: { 
                     user: { id: user.uid, username: user.displayName || user.email?.split('@')[0] || 'Utente' }, 
@@ -354,10 +356,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const loginWithGoogle = async () => {
         const provider = new GoogleAuthProvider();
+        // Force account selection to help with some auth issues
+        provider.setCustomParameters({
+            prompt: 'select_account'
+        });
+        
         try {
-            await signInWithPopup(auth, provider);
+            const result = await signInWithPopup(auth, provider);
+            if (!result.user) {
+                throw new Error("Accesso fallito: nessun utente restituito.");
+            }
+            return result.user;
         } catch (error: any) {
+            console.error("Errore login Google:", error);
             showNotification(error.message, "error");
+            throw error; // Re-throw so the UI can handle it
         }
     };
 

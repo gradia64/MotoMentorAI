@@ -35,8 +35,12 @@ export const Login: React.FC = () => {
                 <div className="bg-gray-800 py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-gray-700">
                     <div className="space-y-6">
                         {error && (
-                            <div className="bg-red-900/50 border border-red-500 text-red-200 p-3 rounded text-sm">
-                                {error}
+                            <div className="bg-red-900/50 border border-red-500 text-red-200 p-3 rounded text-sm space-y-2">
+                                <p className="font-bold">Errore di accesso:</p>
+                                <p>{error}</p>
+                                <p className="text-xs opacity-80">
+                                    Assicurati che i popup non siano bloccati dal browser o prova ad aprire l'app in una nuova scheda.
+                                </p>
                             </div>
                         )}
                         
