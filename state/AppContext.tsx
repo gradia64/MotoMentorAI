@@ -139,6 +139,7 @@ export interface AppState {
             roadPreference: string;
             customRoadPreferenceText: string;
             customPrompt: string;
+            mapImages: File[];
         };
         virtualMechanic: {
             problemDescription: string;
@@ -217,6 +218,7 @@ const initialState: AppState = {
             roadPreference: '',
             customRoadPreferenceText: '',
             customPrompt: '',
+            mapImages: [],
         },
         virtualMechanic: {
             problemDescription: '',
@@ -478,9 +480,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 return;
             }
 
+            const { mapImages, ...inputsToSave } = state.drafts.tripPlanner;
             const updatedTrip = {
                 ...existingTrip,
-                inputs: { ...state.drafts.tripPlanner },
+                inputs: inputsToSave,
                 itinerary: state.itinerary!
             };
             
@@ -494,9 +497,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
 
         const newId = crypto.randomUUID();
+        const { mapImages, ...inputsToSave } = state.drafts.tripPlanner;
         const newTrip: SavedTrip = {
             id: newId,
-            inputs: { ...state.drafts.tripPlanner },
+            inputs: inputsToSave,
             itinerary: state.itinerary,
             diaryEntries: []
         };

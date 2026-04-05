@@ -114,7 +114,8 @@ export const generateItinerary = async (options: any): Promise<Itinerary> => {
         customRoadPreferenceText,
         period, 
         motorcycle, 
-        customPrompt 
+        customPrompt,
+        mapImages
     } = options;
     
     const roadPref = roadPreference === 'Percorso personalizzato' ? customRoadPreferenceText : roadPreference;
@@ -124,6 +125,7 @@ Pianifica un itinerario di ${duration} giorni ${tripType === 'tour' ? `per il to
 ${tripType === 'tour' ? `Punto di partenza dell'utente: ${departure}.` : ''}
 Periodo: ${period}. Preferenza strade: ${roadPref}.
 ${motorcycle ? `Veicolo: ${motorcycle.model} (${motorcycle.year}).` : ''}
+${mapImages && mapImages.length > 0 ? `L'utente ha fornito ${mapImages.length} screenshot di Google Maps con percorsi desiderati. Analizzali e integrali nell'itinerario.` : ""}
 FILOSOFIA: Massima precisione geografica, strade panoramiche, tappe bilanciate.
 Richieste aggiuntive: ${customPrompt || 'Nessuna'}.
 
@@ -134,8 +136,20 @@ REGOLE JSON: Restituisci esclusivamente l'oggetto JSON richiesto secondo ITINERA
         responseSchema: ITINERARY_SCHEMA,
     };
     
+    const parts: any[] = [{ text: prompt }];
+    if (mapImages && mapImages.length > 0) {
+        for (const img of mapImages) {
+            const base64Data = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+                reader.readAsDataURL(img);
+            });
+            parts.push({ inlineData: { data: base64Data, mimeType: img.type } });
+        }
+    }
+
     // Tenta prima con il modello Pro, apiProxy gestirà il fallback a Flash in caso di errore 429
-    const response = await apiProxy('gemini-3.1-pro-preview', { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy('gemini-3.1-pro-preview', { parts }, config);
     return mapApiItineraryToAppItinerary(response);
 };
 

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Day, GpxPoint } from '../../types';
-import { ArchiveBoxIcon, GlobeAltIcon, ArrowDownOnSquareIcon, BookOpenIcon, ClockIcon, BellAlertIcon, ShieldCheckIcon, BuildingStorefrontIcon, HomeIcon, ArrowDownTrayIcon, DocumentPlusIcon, MapIcon, QueueListIcon, ArrowsRightLeftIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { ArchiveBoxIcon, GlobeAltIcon, ArrowDownOnSquareIcon, BookOpenIcon, ClockIcon, BellAlertIcon, ShieldCheckIcon, BuildingStorefrontIcon, HomeIcon, ArrowDownTrayIcon, DocumentPlusIcon, MapIcon, QueueListIcon, ArrowsRightLeftIcon, ArrowPathIcon, PhotoIcon, XCircleIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
@@ -143,10 +143,60 @@ const TripPlanner: React.FC = () => {
         roadPreference,
         customRoadPreferenceText,
         customPrompt,
+        mapImages,
     } = drafts.tripPlanner;
+
+    const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+
+    // Sync image previews with draft state
+    React.useEffect(() => {
+        if (!mapImages || mapImages.length === 0) {
+            setImagePreviews([]);
+            return;
+        }
+        
+        const loadPreviews = async () => {
+            const previews = await Promise.all(mapImages.map((file: File) => {
+                return new Promise<string>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(file);
+                });
+            }));
+            setImagePreviews(previews);
+        };
+        
+        loadPreviews();
+    }, [mapImages]);
 
     const setDraftValue = (field: string, value: any) => {
         dispatch({ type: 'UPDATE_TRIP_DRAFT', payload: { [field]: value } });
+    };
+
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
+        e.preventDefault();
+        let files: FileList | null = null;
+        
+        if ('files' in e.target && e.target.files) {
+            files = e.target.files;
+        } else if ('dataTransfer' in e && e.dataTransfer.files) {
+            files = e.dataTransfer.files;
+        }
+
+        if (files && files.length > 0) {
+            const newFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+            setDraftValue('mapImages', [...mapImages, ...newFiles]);
+        }
+    };
+
+    const removeImage = (index: number) => {
+        const updatedImages = [...mapImages];
+        updatedImages.splice(index, 1);
+        setDraftValue('mapImages', updatedImages);
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
     };
     
     const [showHistory, setShowHistory] = useState(false);
@@ -286,6 +336,51 @@ const TripPlanner: React.FC = () => {
                     </div>
                 )}
                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Screenshot Google Maps (opzionale)
+                        <Tooltip text="Carica uno o più screenshot di percorsi da Google Maps per farli analizzare all'IA">
+                            <span className="ml-2 text-xs text-blue-400 cursor-help underline">Come funziona?</span>
+                        </Tooltip>
+                    </label>
+                    <div className="space-y-4">
+                        <label 
+                            className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-600 border-dashed rounded-lg cursor-pointer bg-gray-700/50 hover:bg-gray-700 transition-colors"
+                            onDragOver={handleDragOver}
+                            onDrop={handleImageChange}
+                        >
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                <PhotoIcon className="w-8 h-8 mb-3 text-gray-400" />
+                                <p className="mb-2 text-sm text-gray-400"><span className="font-semibold">Clicca per caricare</span> o trascina più immagini</p>
+                                <p className="text-xs text-gray-500">PNG, JPG o WEBP (MAX. 5MB ciascuna)</p>
+                            </div>
+                            <input type="file" className="hidden" accept="image/*" multiple onChange={handleImageChange} />
+                        </label>
+
+                        {imagePreviews.length > 0 && (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                {imagePreviews.map((preview, index) => (
+                                    <div key={index} className="relative aspect-video rounded-lg overflow-hidden border-2 border-blue-500/50 group">
+                                        <img src={preview} alt={`Preview Mappa ${index + 1}`} className="w-full h-full object-cover" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <button 
+                                                type="button"
+                                                onClick={() => removeImage(index)}
+                                                className="p-1.5 bg-red-600 rounded-full text-white hover:bg-red-700 transition-colors"
+                                            >
+                                                <XCircleIcon className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                        <div className="absolute bottom-1 left-1 bg-blue-600 text-white text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                                            Mappa {index + 1}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="md:col-span-2">
                     <label htmlFor="customPrompt" className="block text-sm font-medium text-gray-300">Richieste Specifiche (opzionale)</label>
                     <div className="mt-1">
                         <textarea
