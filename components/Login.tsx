@@ -43,6 +43,9 @@ export const Login: React.FC = () => {
                 <p className="mt-2 text-sm text-gray-400">
                     Accedi per pianificare i tuoi viaggi e gestire la tua moto
                 </p>
+                <div className="mt-4 p-2 bg-blue-900/30 border border-blue-500/50 rounded text-[10px] text-blue-200">
+                    <p>💡 Se sei su smartphone e riscontri problemi, prova ad aprire l'app in una nuova scheda del browser.</p>
+                </div>
             </div>
 
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
@@ -54,8 +57,16 @@ export const Login: React.FC = () => {
                                 <p>{error}</p>
                                 <div className="text-xs opacity-80 space-y-1">
                                     <p>Dominio corrente: <code className="bg-black/30 px-1 rounded">{window.location.hostname}</code></p>
-                                    <p>Assicurati che questo dominio sia in "Authorized domains" su Firebase.</p>
-                                    <p>Se il problema persiste, prova ad aprire l'app in una nuova scheda o usa una finestra in incognito.</p>
+                                    {error.includes('missing initial state') ? (
+                                        <p className="text-yellow-300 font-semibold mt-2">
+                                            Suggerimento: Su smartphone, usa il pulsante principale "Accedi con Google" (Popup). Se non funziona, prova ad aprire l'app nel browser esterno (Safari/Chrome) invece che dall'anteprima di AI Studio.
+                                        </p>
+                                    ) : (
+                                        <>
+                                            <p>Assicurati che questo dominio sia in "Authorized domains" su Firebase.</p>
+                                            <p>Se il problema persiste, prova ad aprire l'app in una nuova scheda o usa una finestra in incognito.</p>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         )}

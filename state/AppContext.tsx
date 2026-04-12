@@ -10,6 +10,9 @@ import {
     onAuthStateChanged, 
     signInWithPopup, 
     signInWithRedirect,
+    getRedirectResult,
+    setPersistence,
+    browserLocalPersistence,
     GoogleAuthProvider, 
     signOut,
     User as FirebaseUser
@@ -291,6 +294,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const checkAuth = () => {
         console.log("Inizio controllo autenticazione...");
         dispatch({ type: 'SET_CHECKING_AUTH', payload: true });
+
+        // Ensure persistence is set to LOCAL
+        setPersistence(auth, browserLocalPersistence).catch(err => console.error("Errore setPersistence:", err));
+
+        // Handle redirect result
+        getRedirectResult(auth).then((result) => {
+            if (result?.user) {
+                console.log("Login tramite redirect completato:", result.user.uid);
+                showNotification("Accesso completato con successo!");
+            }
+        }).catch((error) => {
+            console.error("Errore getRedirectResult:", error);
+            if (error.code === 'auth/missing-initial-state' || error.message?.includes('missing initial state')) {
+                showNotification("Errore di sessione: prova ad usare il pulsante 'Accedi con Google' (Popup) o apri l'app in una nuova scheda.", "error");
+            } else {
+                showNotification("Errore durante il completamento dell'accesso: " + error.message, "error");
+            }
+        });
+
         onAuthStateChanged(auth, async (user) => {
             console.log("Stato autenticazione cambiato:", user ? `Utente: ${user.uid}` : "Nessun utente");
             if (user) {
