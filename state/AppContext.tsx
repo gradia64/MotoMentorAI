@@ -836,17 +836,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setTimeout(() => {
             try {
                 generatePdf(
-                    `Itinerario_${currentItinerary.tripTitle.replace(/\s/g, '_')}.pdf`,
-                    currentItinerary.tripTitle,
+                    `RoadBook_${currentItinerary.tripTitle.replace(/\s/g, '_')}.pdf`,
+                    `ROAD BOOK: ${currentItinerary.tripTitle.toUpperCase()}`,
                     ({ addWrappedText, addSeparator }) => {
-                        addWrappedText(currentItinerary.generalDescription, { size: 12, marginBottom: 5 });
+                        // Section: Introduction
+                        addWrappedText("DESCRIZIONE GENERALE", { size: 10, color: [100], marginBottom: 2 });
+                        addWrappedText(currentItinerary.generalDescription, { size: 11, marginBottom: 8 });
+
+                        // Section: Vehicle Info (if active)
+                        if (state.activeVehicle) {
+                            addWrappedText("VEICOLO E DOTAZIONE:", { size: 9, color: [100], marginBottom: 1 });
+                            addWrappedText(`${state.activeVehicle.model} (${state.activeVehicle.year})`, { size: 11, color: [50], marginBottom: 5 });
+                        }
+
+                        // Section: Daily Stages
                         currentItinerary.dailySchedule.forEach(day => {
-                            addSeparator();
-                            addWrappedText(`GIORNO ${day.day}: ${day.stageTitle}`, { size: 14, color: [37, 99, 235], marginBottom: 3 });
-                            addWrappedText(`${day.stageKilometers} km - ${day.weatherForecast.conditions}`, { size: 10, marginBottom: 2 });
-                            addWrappedText(day.routeDescription);
-                            addWrappedText("ATTIVITÀ:", { size: 10, color: [100], marginBottom: 1 });
-                            day.activities.forEach(a => addWrappedText(`• ${a}`, { isListItem: true, size: 9 }));
+                            addSeparator({ marginTop: 8, marginBottom: 8 });
+                            
+                            // Day Header
+                            addWrappedText(`TAPPA ${day.day}`, { size: 18, color: [37, 99, 235], marginBottom: 1 });
+                            addWrappedText(day.stageTitle.toUpperCase(), { size: 12, color: [50], marginBottom: 5 });
+                            
+                            // Stats Summary
+                            addWrappedText(`PERCORSO STIMATO: ${day.stageKilometers} km`, { size: 10, color: [80] });
+                            addWrappedText(`METEO PREVISTO: ${day.weatherForecast.conditions} (${day.weatherForecast.temperatureMin}°C / ${day.weatherForecast.temperatureMax}°C)`, { size: 10, color: [80], marginBottom: 6 });
+                            
+                            // Detailed Route (Road Book Style)
+                            addWrappedText("GUIDA AL PERCORSO:", { size: 10, color: [100], marginBottom: 2 });
+                            addWrappedText(day.routeDescription, { size: 11, marginBottom: 6 });
+
+                            // Checkpoints / Highlights
+                            if (day.activities && day.activities.length > 0) {
+                                addWrappedText("CHECKPOINT E PUNTI DI INTERESSE:", { size: 10, color: [100], marginBottom: 2 });
+                                day.activities.forEach(a => addWrappedText(`[ ] ${a}`, { isListItem: true, size: 9, marginBottom: 1 }));
+                            }
+
+                            // Technical Info / Driving Tips
+                            if (day.drivingTips) {
+                                addWrappedText("NOTE TECNICHE DI GUIDA:", { size: 9, color: [180, 83, 9], marginBottom: 1 });
+                                addWrappedText(`! ${day.drivingTips}`, { size: 10, color: [180, 83, 9], marginBottom: 4 });
+                            }
+
+                            // Logistics
+                            addWrappedText("RISTORO E PERNOTTAMENTO:", { size: 9, color: [100], marginBottom: 2 });
+                            addWrappedText(`• Ristoro: ${day.restaurantOption || 'Non specificato'}`, { size: 10, marginBottom: 1 });
+                            addWrappedText(`• Alloggio: ${day.accommodation || 'Non specificato'}`, { size: 10, marginBottom: 8 });
+
+                            // Rider's Notes Section (The technical "Road Book" feel)
+                            addWrappedText("NOTE DEL MOTOCICLISTA (Timbri, Spese, Rifornimenti):", { size: 8, color: [150], marginBottom: 2 });
+                            addWrappedText("________________________________________________________________________________", { size: 8, color: [200], marginBottom: 1 });
+                            addWrappedText("________________________________________________________________________________", { size: 8, color: [200], marginBottom: 1 });
+                            addWrappedText("________________________________________________________________________________", { size: 8, color: [200], marginBottom: 1 });
                         });
                     }
                 );
