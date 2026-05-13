@@ -138,6 +138,7 @@ const TripPlanner: React.FC = () => {
         selectedTour,
         departure,
         destination,
+        returnPoint,
         duration,
         period,
         roadPreference,
@@ -300,7 +301,8 @@ const TripPlanner: React.FC = () => {
                 {tripType === 'itinerary' ? (
                     <>
                         <InputField id="departure" label="Luogo di Partenza" value={departure} onChange={(e) => setDraftValue('departure', e.target.value)} placeholder="Es. Milano" required />
-                        <InputField id="destination" label="Destinazione" value={destination} onChange={(e) => setDraftValue('destination', e.target.value)} placeholder="Es. Costiera Amalfitana" required />
+                        <InputField id="destination" label="Destinazione / Giro di Boa" value={destination} onChange={(e) => setDraftValue('destination', e.target.value)} placeholder="Es. Costiera Amalfitana" required />
+                        <InputField id="returnPoint" label="Luogo di Ritorno" value={returnPoint} onChange={(e) => setDraftValue('returnPoint', e.target.value)} placeholder="Es. Milano (stesso punto o altro)" required />
                     </>
                 ) : (
                     <>

@@ -137,6 +137,7 @@ export interface AppState {
             selectedTour: string;
             departure: string;
             destination: string;
+            returnPoint: string;
             duration: string;
             period: string;
             roadPreference: string;
@@ -216,6 +217,7 @@ const initialState: AppState = {
             selectedTour: '',
             departure: '',
             destination: '',
+            returnPoint: '',
             duration: '',
             period: '',
             roadPreference: '',

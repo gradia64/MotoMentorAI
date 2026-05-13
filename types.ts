@@ -98,6 +98,7 @@ export interface SavedTrip {
         tripType: 'itinerary' | 'tour';
         departure?: string;
         destination?: string;
+        returnPoint?: string;
         selectedTour?: string;
         duration: string;
         period: string;

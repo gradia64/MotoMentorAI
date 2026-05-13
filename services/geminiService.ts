@@ -108,6 +108,7 @@ export const generateItinerary = async (options: any): Promise<Itinerary> => {
         tripType,
         departure, 
         destination, 
+        returnPoint,
         selectedTour, 
         duration, 
         roadPreference, 
@@ -121,7 +122,7 @@ export const generateItinerary = async (options: any): Promise<Itinerary> => {
     const roadPref = roadPreference === 'Percorso personalizzato' ? customRoadPreferenceText : roadPreference;
     
     const prompt = `Agisci come MotoMentor, esperto di mototurismo.
-Pianifica un itinerario di ${duration} giorni ${tripType === 'tour' ? `per il tour denominato "${selectedTour}"` : `da ${departure} a ${destination}`}.
+Pianifica un itinerario di ${duration} giorni ${tripType === 'tour' ? `per il tour denominato "${selectedTour}"` : `con partenza da ${departure}, destinazione/giro di boa a ${destination} e ritorno a ${returnPoint}`}.
 ${tripType === 'tour' ? `Punto di partenza dell'utente: ${departure}.` : ''}
 Periodo: ${period}. Preferenza strade: ${roadPref}.
 ${motorcycle ? `Veicolo: ${motorcycle.model} (${motorcycle.year}).` : ''}
