@@ -34,7 +34,7 @@ const SectionLoader: React.FC = () => (
 );
 
 const AppContent: React.FC = () => {
-    const { state, dispatch, checkAuth } = useAppContext();
+    const { state, dispatch, checkAuth, logout } = useAppContext();
     const [fatalError, setFatalError] = React.useState<string | null>(null);
 
     useEffect(() => {
@@ -64,6 +64,8 @@ const AppContent: React.FC = () => {
             clearTimeout(backupTimer);
         };
     }, []);
+
+    const setMode = (mode: AiMode) => dispatch({ type: 'SET_MODE', payload: mode });
 
     if (fatalError) {
         return (
@@ -155,9 +157,6 @@ const AppContent: React.FC = () => {
 
     return (
         <div className="bg-slate-900 text-white min-h-screen font-sans">
-            <div className="bg-yellow-500 text-black text-center p-1 text-[10px] font-bold uppercase tracking-wider sticky top-0 z-50">
-                MotoMentor AI - Dashboard Caricata
-            </div>
             <Notification />
             <header className="bg-gray-800 shadow-md sticky top-0 z-10">
                 <div className="container mx-auto px-4 py-4 flex justify-between items-center">
