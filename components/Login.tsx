@@ -3,12 +3,28 @@ import { useAppContext } from '../state/AppContext';
 import Logo from './Logo';
 
 export const Login: React.FC = () => {
-    const { loginWithGoogle, loginWithGoogleRedirect, signUpWithEmail, loginWithEmail } = useAppContext();
+    const { loginWithGoogle, loginWithGoogleRedirect, signUpWithEmail, loginWithEmail, resetPassword } = useAppContext();
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isRegistering, setIsRegistering] = useState(false);
+
+    const handleResetPassword = async () => {
+        if (!email) {
+            setError("Inserisci la tua email per reimpostare la password.");
+            return;
+        }
+        setError('');
+        setLoading(true);
+        try {
+            await resetPassword(email);
+        } catch (err: any) {
+            setError(err.message || "Errore durante l'invio dell'email di reset");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleGoogleLogin = async () => {
         setError('');
@@ -16,7 +32,7 @@ export const Login: React.FC = () => {
         try {
             await loginWithGoogle();
         } catch (err: any) {
-            console.error("Errore login Google (Popup):", err);
+            console.error("Errore login Google (Popup) - Dettagli completi:", err);
             setError(err.message || "Si è verificato un errore durante l'accesso con Google");
         } finally {
             setLoading(false);
@@ -29,7 +45,7 @@ export const Login: React.FC = () => {
         try {
             await loginWithGoogleRedirect();
         } catch (err: any) {
-            console.error("Errore login Google (Redirect):", err);
+            console.error("Errore login Google (Redirect) - Dettagli completi:", err);
             setError(err.message || "Si è verificato un errore durante l'accesso con Google");
         } finally {
             setLoading(false);
@@ -47,7 +63,18 @@ export const Login: React.FC = () => {
                 await loginWithEmail(email, password);
             }
         } catch (err: any) {
-            setError(err.message || "Errore durante l'autenticazione");
+            console.error("Errore autenticazione Email - Dettagli completi:", err);
+            let msg = err.message || "Errore durante l'autenticazione";
+            
+            if (err.code === 'auth/invalid-credential') {
+                msg = "Credenziali non valide o errore di configurazione. Se stai cercando di registrarti e vedi questo errore, controlla che l'API Identity Toolkit sia abilitata nella Google Cloud Console e che la Chiave API non abbia restrizioni di dominio troppo stringenti.";
+            } else if (err.code === 'auth/email-already-in-use') {
+                msg = "Questa email è già registrata. Prova ad accedere.";
+            } else if (err.code === 'auth/weak-password') {
+                msg = "La password è troppo debole (minimo 6 caratteri).";
+            }
+            
+            setError(msg);
         } finally {
             setLoading(false);
         }
@@ -154,7 +181,18 @@ export const Login: React.FC = () => {
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-gray-400 mb-1">Password</label>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-xs font-medium text-gray-400">Password</label>
+                                    {!isRegistering && (
+                                        <button 
+                                            type="button"
+                                            onClick={handleResetPassword}
+                                            className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+                                        >
+                                            Password dimenticata?
+                                        </button>
+                                    )}
+                                </div>
                                 <input
                                     type="password"
                                     required
@@ -175,7 +213,10 @@ export const Login: React.FC = () => {
 
                         <div className="text-center">
                             <button
-                                onClick={() => setIsRegistering(!isRegistering)}
+                                onClick={() => {
+                                    setIsRegistering(!isRegistering);
+                                    setError('');
+                                }}
                                 className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
                             >
                                 {isRegistering ? 'Hai già un account? Accedi' : 'Non hai un account? Registrati qui'}

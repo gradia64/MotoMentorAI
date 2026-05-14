@@ -17,7 +17,9 @@ import {
     signOut,
     User as FirebaseUser,
     createUserWithEmailAndPassword,
-    signInWithEmailAndPassword
+    signInWithEmailAndPassword,
+    sendPasswordResetEmail,
+    updateProfile
 } from 'firebase/auth';
 import { 
     doc, 
@@ -418,9 +420,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const signUpWithEmail = async (email: string, pass: string) => {
         try {
             const result = await createUserWithEmailAndPassword(auth, email, pass);
+            // Optionally set a default username
+            await updateProfile(result.user, {
+                displayName: email.split('@')[0]
+            });
             return result.user;
         } catch (error: any) {
-            console.error("Errore registrazione Email:", error);
+            console.error("Errore registrazione Email (Dettagli):", {
+                code: error.code,
+                message: error.message,
+                email: email
+            });
             showNotification(error.message, "error");
             throw error;
         }
@@ -431,7 +441,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const result = await signInWithEmailAndPassword(auth, email, pass);
             return result.user;
         } catch (error: any) {
-            console.error("Errore login Email:", error);
+            console.error("Errore login Email (Dettagli):", {
+                code: error.code,
+                message: error.message,
+                email: email
+            });
+            showNotification(error.message, "error");
+            throw error;
+        }
+    };
+
+    const resetPassword = async (email: string) => {
+        try {
+            await sendPasswordResetEmail(auth, email);
+            showNotification("Email di reset inviata! Controlla la tua posta.");
+        } catch (error: any) {
+            console.error("Errore reset password:", error);
             showNotification(error.message, "error");
             throw error;
         }
@@ -1016,7 +1041,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             handleDownloadDiagnosisPdf, handleDownloadChecklistPdf, handleGenerateSpecs,
             handleUpdateTrip, handleGenerateDiarySummary, handleDownloadDiaryPdf,
             handleClearActiveChat, handleSaveCurrentChat, handleLoadChatHistory, handleDeleteSavedChat,
-            loginWithGoogle, loginWithGoogleRedirect, signUpWithEmail, loginWithEmail, logout, checkAuth
+            loginWithGoogle, loginWithGoogleRedirect, signUpWithEmail, loginWithEmail, resetPassword, logout, checkAuth
         }}>
             {children}
         </AppContext.Provider>
