@@ -15,7 +15,9 @@ import {
     browserLocalPersistence,
     GoogleAuthProvider, 
     signOut,
-    User as FirebaseUser
+    User as FirebaseUser,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword
 } from 'firebase/auth';
 import { 
     doc, 
@@ -67,7 +69,7 @@ function handleFirestoreError(error: any, operationType: OperationType, path: st
       emailVerified: auth.currentUser?.emailVerified,
       isAnonymous: auth.currentUser?.isAnonymous,
       tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
         providerId: provider.providerId,
         displayName: provider.displayName,
         email: provider.email,
@@ -206,7 +208,7 @@ const initialState: AppState = {
     diagnosis: null,
     activeDiagnosisId: null,
     activeChatId: null,
-    activeVehId: localStorage.getItem('motomentor_active_vehicle') || null,
+    activeVehId: (typeof window !== 'undefined' ? localStorage.getItem('motomentor_active_vehicle') : null) || null,
     maintenanceTips: null,
     activeDiaryTripId: null,
     chatSession: null,
@@ -297,6 +299,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.log("Inizio controllo autenticazione...");
         dispatch({ type: 'SET_CHECKING_AUTH', payload: true });
 
+        // Safety timeout: if auth doesn't resolve in 8 seconds, stop loading
+        const authTimeout = setTimeout(() => {
+            if (state.isCheckingAuth) {
+                console.warn("Auth check timed out, forcing isCheckingAuth to false");
+                dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
+            }
+        }, 8000);
+
         // Ensure persistence is set to LOCAL
         setPersistence(auth, browserLocalPersistence).catch(err => console.error("Errore setPersistence:", err));
 
@@ -316,6 +326,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
 
         onAuthStateChanged(auth, async (user) => {
+            clearTimeout(authTimeout);
             console.log("Stato autenticazione cambiato:", user ? `Utente: ${user.uid}` : "Nessun utente");
             if (user) {
                 dispatch({ type: 'SET_AUTH', payload: { 
@@ -399,6 +410,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             await signInWithRedirect(auth, provider);
         } catch (error: any) {
             console.error("Errore login Google (Redirect):", error);
+            showNotification(error.message, "error");
+            throw error;
+        }
+    };
+
+    const signUpWithEmail = async (email: string, pass: string) => {
+        try {
+            const result = await createUserWithEmailAndPassword(auth, email, pass);
+            return result.user;
+        } catch (error: any) {
+            console.error("Errore registrazione Email:", error);
+            showNotification(error.message, "error");
+            throw error;
+        }
+    };
+
+    const loginWithEmail = async (email: string, pass: string) => {
+        try {
+            const result = await signInWithEmailAndPassword(auth, email, pass);
+            return result.user;
+        } catch (error: any) {
+            console.error("Errore login Email:", error);
             showNotification(error.message, "error");
             throw error;
         }
@@ -983,7 +1016,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             handleDownloadDiagnosisPdf, handleDownloadChecklistPdf, handleGenerateSpecs,
             handleUpdateTrip, handleGenerateDiarySummary, handleDownloadDiaryPdf,
             handleClearActiveChat, handleSaveCurrentChat, handleLoadChatHistory, handleDeleteSavedChat,
-            loginWithGoogle, loginWithGoogleRedirect, logout, checkAuth
+            loginWithGoogle, loginWithGoogleRedirect, signUpWithEmail, loginWithEmail, logout, checkAuth
         }}>
             {children}
         </AppContext.Provider>
