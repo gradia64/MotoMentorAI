@@ -4,7 +4,7 @@ import Logo from './Logo';
 
 export const Login: React.FC = () => {
     const { loginWithGoogle, loginWithGoogleRedirect, signUpWithEmail, loginWithEmail, resetPassword } = useAppContext();
-    const [error, setError] = useState('');
+    const [error, setError] = useState<React.ReactNode>('');
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -20,6 +20,7 @@ export const Login: React.FC = () => {
         try {
             await resetPassword(email);
         } catch (err: any) {
+            console.error("Errore reset password:", err);
             setError(err.message || "Errore durante l'invio dell'email di reset");
         } finally {
             setLoading(false);
@@ -64,14 +65,28 @@ export const Login: React.FC = () => {
             }
         } catch (err: any) {
             console.error("Errore autenticazione Email - Dettagli completi:", err);
-            let msg = err.message || "Errore durante l'autenticazione";
+            let msg: React.ReactNode = err.message || "Errore durante l'autenticazione";
             
-            if (err.code === 'auth/invalid-credential') {
-                msg = "Credenziali non valide o errore di configurazione. Se stai cercando di registrarti e vedi questo errore, controlla che l'API Identity Toolkit sia abilitata nella Google Cloud Console e che la Chiave API non abbia restrizioni di dominio troppo stringenti.";
+            if (err.code === 'auth/invalid-credential' || (err.message && err.message.includes('invalid-credential'))) {
+                msg = (
+                    <div className="space-y-2 text-left">
+                        <p className="font-bold">Credenziali non valide o errore di configurazione.</p>
+                        <p className="text-xs">Possibili cause:</p>
+                        <ul className="list-disc ml-4 space-y-1 text-[11px] opacity-90">
+                            <li><strong>Password errata:</strong> Se l'account esiste già, la password inserita non è corretta.</li>
+                            <li><strong>Account Google:</strong> Se ti sei registrato con Google, non hai una password. Usa "Password dimenticata" per impostarne una o usa il login Google.</li>
+                            <li><strong>Identità Multi-Tenant:</strong> Se hai abilitato Identity Platform, Firebase potrebbe richiedere una configurazione aggiuntiva.</li>
+                            <li><strong>Dominio non autorizzato:</strong> Verifica che <code className="bg-white/10 px-1">moto-mentor-ai.vercel.app</code> sia tra i domini autorizzati in Firebase Console &rarr; Auth &rarr; Settings.</li>
+                        </ul>
+                        <div className="mt-2 pt-2 border-t border-red-400/20">
+                            <p className="text-[10px] italic">Controlla la console del browser (F12) per i dettagli tecnici dell'errore.</p>
+                        </div>
+                    </div>
+                );
             } else if (err.code === 'auth/email-already-in-use') {
-                msg = "Questa email è già registrata. Prova ad accedere.";
+                msg = "Questa email è già registrata. Prova ad accedere invece di registrarti.";
             } else if (err.code === 'auth/weak-password') {
-                msg = "La password è troppo debole (minimo 6 caratteri).";
+                msg = "La password deve essere di almeno 6 caratteri.";
             }
             
             setError(msg);
@@ -79,6 +94,8 @@ export const Login: React.FC = () => {
             setLoading(false);
         }
     };
+
+    const isMissingInitialState = typeof error === 'string' && error.includes('missing initial state');
 
     return (
         <div className="min-h-screen bg-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -100,11 +117,11 @@ export const Login: React.FC = () => {
                     <div className="space-y-6">
                         {error && (
                             <div className="bg-red-900/50 border border-red-500 text-red-200 p-3 rounded text-sm space-y-2">
-                                <p className="font-bold">Errore di accesso:</p>
-                                <p>{error}</p>
+                                <div className="font-bold">Errore di accesso:</div>
+                                <div>{error}</div>
                                 <div className="text-xs opacity-80 space-y-1">
                                     <p>Dominio corrente: <code className="bg-black/30 px-1 rounded">{window.location.hostname}</code></p>
-                                    {error.includes('missing initial state') ? (
+                                    {isMissingInitialState ? (
                                         <p className="text-yellow-300 font-semibold mt-2">
                                             Suggerimento: Su smartphone, usa il pulsante principale "Accedi con Google" (Popup). Se non funziona, prova ad aprire l'app nel browser esterno (Safari/Chrome) invece che dall'anteprima di AI Studio.
                                         </p>

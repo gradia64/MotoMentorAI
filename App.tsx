@@ -1,7 +1,6 @@
 
 import React, { Suspense, lazy, useEffect } from 'react';
 import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, ClockIcon, BookOpenIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
-import { SpeedInsights } from '@vercel/speed-insights/react';
 
 import { AiMode } from './types';
 import { AppProvider, useAppContext } from './state/AppContext';
@@ -35,15 +34,71 @@ const SectionLoader: React.FC = () => (
 );
 
 const AppContent: React.FC = () => {
-    const { state, dispatch, checkAuth, logout } = useAppContext();
+    const { state, dispatch, checkAuth } = useAppContext();
+    const [fatalError, setFatalError] = React.useState<string | null>(null);
 
     useEffect(() => {
+        const handleError = (event: ErrorEvent) => {
+            setFatalError(`Runtime Error: ${event.message}`);
+        };
+        const handleRejection = (event: PromiseRejectionEvent) => {
+            setFatalError(`Promise Error: ${event.reason?.message || event.reason}`);
+        };
+
+        window.addEventListener('error', handleError);
+        window.addEventListener('unhandledrejection', handleRejection);
+
         checkAuth();
+
+        // Safety redundancy: ensure we don't stay in loading forever
+        const backupTimer = setTimeout(() => {
+            if (state.isCheckingAuth) {
+                console.warn("AppContent: forcing isCheckingAuth to false as backup");
+                dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
+            }
+        }, 12000);
+
+        return () => {
+            window.removeEventListener('error', handleError);
+            window.removeEventListener('unhandledrejection', handleRejection);
+            clearTimeout(backupTimer);
+        };
     }, []);
 
-    const setMode = (mode: AiMode) => dispatch({ type: 'SET_MODE', payload: mode });
+    if (fatalError) {
+        return (
+            <div className="min-h-screen bg-red-900 flex items-center justify-center text-white p-8">
+                <div className="max-w-md w-full bg-black/40 p-6 rounded-xl border border-red-500 shadow-2xl">
+                    <h1 className="text-2xl font-bold mb-4 text-red-400">Si è verificato un errore fatale</h1>
+                    <p className="mb-6 text-sm opacity-90">{fatalError}</p>
+                    <button 
+                        onClick={() => window.location.reload()}
+                        className="w-full bg-red-600 hover:bg-red-500 py-3 rounded-lg font-bold transition-colors"
+                    >
+                        Ricarica applicazione
+                    </button>
+                    <button 
+                        onClick={() => setFatalError(null)}
+                        className="w-full mt-2 text-xs opacity-50 underline"
+                    >
+                        Ignora e prosegui (Sperimentale)
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     if (state.isCheckingAuth) {
+        const isStorageBlocked = (() => {
+            try {
+                localStorage.setItem('test', 'test');
+                localStorage.removeItem('test');
+                return false;
+            } catch (e) {
+                return true;
+            }
+        })();
+
         return (
             <div 
                 style={{ 
@@ -53,13 +108,42 @@ const AppContent: React.FC = () => {
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
-                    fontFamily: 'sans-serif'
+                    fontFamily: 'sans-serif',
+                    padding: '20px'
                 }}
-                className="min-h-screen bg-gray-900 flex items-center justify-center text-white"
             >
-                <div style={{ textAlign: 'center' }}>
-                    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4 mx-auto"></div>
-                    <p>MotoMentor AI: Caricamento...</p>
+                <div style={{ textAlign: 'center', maxWidth: '400px' }}>
+                    <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6 mx-auto"></div>
+                    <p className="text-2xl font-bold mb-2">MotoMentor AI</p>
+                    <p className="mb-6 text-gray-400">Inizializzazione in corso... (12s backup attivo)</p>
+                    
+                    <div className="bg-white/5 border border-white/10 p-4 rounded-lg text-left text-[11px] mb-8 space-y-2 font-mono">
+                        <p>Ambiente: <span className="text-blue-300">AI Studio Preview</span></p>
+                        <p>Storage: <span className={isStorageBlocked ? "text-red-400" : "text-green-400"}>{isStorageBlocked ? 'BLOCCATO (Disabilita blocco cookie 3rd party)' : 'Disponibile'}</span></p>
+                        <p>Auth Ready: <span className="text-gray-400">{state.isAuthenticated ? 'SI' : 'In attesa...'}</span></p>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                        <button 
+                            onClick={() => window.location.reload()}
+                            className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-semibold transition-all shadow-lg"
+                        >
+                            Ricarica App
+                        </button>
+                        <button 
+                            onClick={() => {
+                                console.log("Skip manuale attivato");
+                                dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
+                            }}
+                            className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg font-medium transition-all text-sm"
+                        >
+                            Forza Avvio (Ignora caricamento)
+                        </button>
+                    </div>
+                    
+                    <p className="mt-8 text-[10px] text-gray-400 leading-relaxed uppercase tracking-widest leading-loose">
+                        Se continui a vedere questa schermata, apri l'app in un'altra scheda o usa Safari/Chrome direttamente.
+                    </p>
                 </div>
             </div>
         );
@@ -70,7 +154,10 @@ const AppContent: React.FC = () => {
     }
 
     return (
-        <div className="bg-gray-900 text-white min-h-screen font-sans">
+        <div className="bg-slate-900 text-white min-h-screen font-sans">
+            <div className="bg-yellow-500 text-black text-center p-1 text-[10px] font-bold uppercase tracking-wider sticky top-0 z-50">
+                MotoMentor AI - Dashboard Caricata
+            </div>
             <Notification />
             <header className="bg-gray-800 shadow-md sticky top-0 z-10">
                 <div className="container mx-auto px-4 py-4 flex justify-between items-center">
@@ -175,7 +262,6 @@ const App: React.FC = () => {
     return (
         <AppProvider>
             <AppContent />
-            <SpeedInsights />
         </AppProvider>
     );
 };

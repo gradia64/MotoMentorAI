@@ -88,15 +88,20 @@ root.render(
 );
 
 // --- PWA Service Worker Registration ---
-if ('serviceWorker' in navigator) {
+// Disattivato nel preview environment di AI Studio per problemi di compatibilità con gli iframe
+const isAIStudioPreview = window.location.hostname.includes('europe-west2.run.app') || window.location.hostname.includes('aistudio.google.com');
+
+if ('serviceWorker' in navigator && !isAIStudioPreview) {
   window.addEventListener('load', () => {
     // Use relative path with explicit scope to handle preview environments better
     navigator.serviceWorker.register('./service-worker.js', { scope: './' })
       .then((registration) => {
-        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+        console.log('ServiceWorker registration successful');
       })
       .catch((error) => {
         console.log('ServiceWorker registration failed: ', error);
       });
   });
+} else if (isAIStudioPreview) {
+  console.log('ServiceWorker disattivato in modalità Preview AI Studio.');
 }

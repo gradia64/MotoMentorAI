@@ -6,8 +6,9 @@ import { existsSync } from "fs";
 
 dotenv.config({ override: true });
 
+const app = express();
+
 async function startServer() {
-  const app = express();
   const PORT = 3000;
 
   app.use(cors());

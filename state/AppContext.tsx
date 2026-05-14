@@ -301,13 +301,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.log("Inizio controllo autenticazione...");
         dispatch({ type: 'SET_CHECKING_AUTH', payload: true });
 
-        // Safety timeout: if auth doesn't resolve in 8 seconds, stop loading
+        // Safety timeout: if auth doesn't resolve in 10 seconds, force stop loading
         const authTimeout = setTimeout(() => {
-            if (state.isCheckingAuth) {
-                console.warn("Auth check timed out, forcing isCheckingAuth to false");
-                dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
-            }
-        }, 8000);
+            console.warn("Auth check timed out, forcing isCheckingAuth to false (Safe termination)");
+            dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
+        }, 10000);
 
         // Ensure persistence is set to LOCAL
         setPersistence(auth, browserLocalPersistence).catch(err => console.error("Errore setPersistence:", err));
@@ -330,58 +328,52 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         onAuthStateChanged(auth, async (user) => {
             clearTimeout(authTimeout);
             console.log("Stato autenticazione cambiato:", user ? `Utente: ${user.uid}` : "Nessun utente");
-            if (user) {
-                dispatch({ type: 'SET_AUTH', payload: { 
-                    user: { id: user.uid, username: user.displayName || user.email?.split('@')[0] || 'Utente' }, 
-                    isAuthenticated: true 
-                } });
-                
-                // Set up real-time listeners
-                const userId = user.uid;
-                
-                const garageUnsub = onSnapshot(collection(db, `users/${userId}/vehicles`), (snapshot) => {
-                    dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: snapshot.docs.map(doc => doc.data() as GarageVehicle) } });
-                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/vehicles`));
+            
+            try {
+                if (user) {
+                    dispatch({ type: 'SET_AUTH', payload: { 
+                        user: { id: user.uid, username: user.displayName || user.email?.split('@')[0] || 'Utente' }, 
+                        isAuthenticated: true 
+                    } });
+                    
+                    // Set up real-time listeners
+                    const userId = user.uid;
+                    
+                    // Note: These unsubs are not easily returned from this async callback to the caller,
+                    // but onAuthStateChanged will call this again if auth state changes.
+                    onSnapshot(collection(db, `users/${userId}/vehicles`), (snapshot) => {
+                        dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: snapshot.docs.map(doc => doc.data() as GarageVehicle) } });
+                    }, (error) => console.error("Firestore Listen Error (vehicles):", error));
 
-                const tripsUnsub = onSnapshot(query(collection(db, `users/${userId}/trips`)), (snapshot) => {
-                    dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: snapshot.docs.map(doc => doc.data().data as SavedTrip) } });
-                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/trips`));
+                    onSnapshot(query(collection(db, `users/${userId}/trips`)), (snapshot) => {
+                        dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: snapshot.docs.map(doc => doc.data().data as SavedTrip) } });
+                    }, (error) => console.error("Firestore Listen Error (trips):", error));
 
-                const diagnosesUnsub = onSnapshot(collection(db, `users/${userId}/diagnoses`), (snapshot) => {
-                    dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: snapshot.docs.map(doc => doc.data().data as SavedDiagnosis) } });
-                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/diagnoses`));
+                    onSnapshot(collection(db, `users/${userId}/diagnoses`), (snapshot) => {
+                        dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: snapshot.docs.map(doc => doc.data().data as SavedDiagnosis) } });
+                    }, (error) => console.error("Firestore Listen Error (diagnoses):", error));
 
-                const maintenanceUnsub = onSnapshot(collection(db, `users/${userId}/maintenance`), (snapshot) => {
-                    dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: snapshot.docs.map(doc => doc.data().data as MaintenanceRecord) } });
-                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/maintenance`));
+                    onSnapshot(collection(db, `users/${userId}/maintenance`), (snapshot) => {
+                        dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: snapshot.docs.map(doc => doc.data().data as MaintenanceRecord) } });
+                    }, (error) => console.error("Firestore Listen Error (maintenance):", error));
 
-                const remindersUnsub = onSnapshot(collection(db, `users/${userId}/reminders`), (snapshot) => {
-                    dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: snapshot.docs.map(doc => doc.data().data as MaintenanceReminder) } });
-                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/reminders`));
+                    onSnapshot(collection(db, `users/${userId}/reminders`), (snapshot) => {
+                        dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: snapshot.docs.map(doc => doc.data().data as MaintenanceReminder) } });
+                    }, (error) => console.error("Firestore Listen Error (reminders):", error));
 
-                const chatsUnsub = onSnapshot(collection(db, `users/${userId}/chats`), (snapshot) => {
-                    dispatch({ type: 'SET_DATA', payload: { key: 'savedChats', value: snapshot.docs.map(doc => doc.data().data as SavedChat) } });
-                }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/chats`));
-
+                    onSnapshot(collection(db, `users/${userId}/chats`), (snapshot) => {
+                        dispatch({ type: 'SET_DATA', payload: { key: 'savedChats', value: snapshot.docs.map(doc => doc.data().data as SavedChat) } });
+                    }, (error) => console.error("Firestore Listen Error (chats):", error));
+                } else {
+                    dispatch({ type: 'SET_AUTH', payload: { user: null, isAuthenticated: false } });
+                    // Clear data
+                    const keysToClear: (keyof AppState)[] = ['garageVehicles', 'tripHistory', 'savedDiagnoses', 'maintenanceLog', 'reminders', 'savedChats'];
+                    keysToClear.forEach(key => dispatch({ type: 'SET_DATA', payload: { key, value: [] } }));
+                }
+            } catch (err) {
+                console.error("Errore durante l'inizializzazione dell'utente:", err);
+            } finally {
                 dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
-
-                return () => {
-                    garageUnsub();
-                    tripsUnsub();
-                    diagnosesUnsub();
-                    maintenanceUnsub();
-                    remindersUnsub();
-                    chatsUnsub();
-                };
-            } else {
-                dispatch({ type: 'SET_AUTH', payload: { user: null, isAuthenticated: false } });
-                dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
-                dispatch({ type: 'SET_DATA', payload: { key: 'garageVehicles', value: [] } });
-                dispatch({ type: 'SET_DATA', payload: { key: 'tripHistory', value: [] } });
-                dispatch({ type: 'SET_DATA', payload: { key: 'savedDiagnoses', value: [] } });
-                dispatch({ type: 'SET_DATA', payload: { key: 'maintenanceLog', value: [] } });
-                dispatch({ type: 'SET_DATA', payload: { key: 'reminders', value: [] } });
-                dispatch({ type: 'SET_DATA', payload: { key: 'savedChats', value: [] } });
             }
         });
     };
