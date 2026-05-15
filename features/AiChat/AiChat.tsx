@@ -23,11 +23,15 @@ const AiChat: React.FC = () => {
         scrollToBottom();
     }, [chatHistory, isChatLoading]);
 
-    const submitMessage = (e: React.FormEvent) => {
+    const submitMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (input.trim() && !isChatLoading) {
-            handleSendMessage(input);
-            setInput('');
+        const messageText = input.trim();
+        if (messageText && !isChatLoading) {
+            setInput(''); // Clear immediately for UX, but we can restore if it fails
+            const success = await handleSendMessage(messageText);
+            if (!success) {
+                setInput(messageText); // Restore input if it failed
+            }
         }
     };
 

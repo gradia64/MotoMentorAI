@@ -183,7 +183,7 @@ const initialState: AppState = {
     user: null,
     isAuthenticated: false,
     isCheckingAuth: true,
-    mode: AiMode.TripPlanner,
+    mode: AiMode.Dashboard,
     isLoadingData: false,
     isGeneratingItinerary: false,
     isDiagnosingProblem: false,
@@ -458,10 +458,61 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             await signOut(auth);
             localStorage.removeItem('motomentor_active_vehicle');
+            dispatch({ type: 'SET_MODE', payload: AiMode.Dashboard });
         } catch (error: any) {
             showNotification(error.message, "error");
         }
     };
+
+    // --- Deadline Alert Calculation ---
+    useEffect(() => {
+        if (!state.isAuthenticated || state.garageVehicles.length === 0) {
+            dispatch({ type: 'SET_DATA', payload: { key: 'deadlineAlerts', value: [] } });
+            return;
+        }
+
+        const alerts: DeadlineAlert[] = [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        state.garageVehicles.forEach((v: GarageVehicle) => {
+            const checks: { type: 'Assicurazione' | 'Bollo' | 'Revisione', date?: string }[] = [
+                { type: 'Assicurazione', date: v.insuranceExpiry },
+                { type: 'Bollo', date: v.taxExpiry },
+                { type: 'Revisione', date: v.inspectionExpiry }
+            ];
+
+            checks.forEach(check => {
+                if (check.date) {
+                    const expiryDate = new Date(check.date);
+                    expiryDate.setHours(0, 0, 0, 0);
+                    
+                    const diffTime = expiryDate.getTime() - today.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    if (diffDays <= 30) {
+                        alerts.push({
+                            vehicleId: v.id,
+                            vehicleName: v.model,
+                            type: check.type,
+                            date: check.date,
+                            status: diffDays < 0 ? 'expired' : 'warning',
+                            daysRemaining: diffDays
+                        });
+                    }
+                }
+            });
+        });
+
+        // Sort: expired first, then by days remaining
+        alerts.sort((a, b) => {
+            if (a.status === 'expired' && b.status !== 'expired') return -1;
+            if (a.status !== 'expired' && b.status === 'expired') return 1;
+            return a.daysRemaining - b.daysRemaining;
+        });
+
+        dispatch({ type: 'SET_DATA', payload: { key: 'deadlineAlerts', value: alerts } });
+    }, [state.garageVehicles, state.isAuthenticated]);
 
     const handleAddVehicle = async (v: any) => {
         const userId = auth.currentUser?.uid;
@@ -761,24 +812,68 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
 
         const userMsg = { role: 'user', parts: [{ text: message }] };
-        const updatedHistory = [...state.chatHistory, userMsg];
+        const historyBeforeMessage = state.chatHistory;
+        const updatedHistory = [...historyBeforeMessage, userMsg];
         dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: updatedHistory } });
         dispatch({ type: 'SET_CHAT_LOADING', payload: true });
         
-        try {
-            const streamResponse = await session.sendMessageStream({ message });
-            let fullText = "";
-            for await (const chunk of streamResponse) {
-                const c = chunk as GenerateContentResponse;
-                fullText += c.text;
-                const newHistory = [...updatedHistory, { role: 'model', parts: [{ text: fullText }] }];
-                dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: newHistory } });
+        const trySendMessage = async (attempt = 1): Promise<boolean> => {
+            try {
+                // Ensure we have a session
+                if (!session) {
+                    session = createChatSession(state.activeVehicle, historyBeforeMessage);
+                    dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: session } });
+                }
+
+                const streamResponse = await session.sendMessageStream({ message });
+                let fullText = "";
+                for await (const chunk of streamResponse) {
+                    const c = chunk as GenerateContentResponse;
+                    fullText += c.text || "";
+                    const newHistory = [...updatedHistory, { role: 'model', parts: [{ text: fullText }] }];
+                    dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: newHistory } });
+                }
+                return true;
+            } catch (err: any) {
+                console.error(`Chat attempt ${attempt} failed:`, err);
+                
+                // Retry logic for transient errors (max 2 retries)
+                const isTransient = err.message?.includes("429") || 
+                                    err.message?.includes("RESOURCE_EXHAUSTED") ||
+                                    err.message?.includes("network") ||
+                                    err.message?.includes("fetch");
+                
+                if (isTransient && attempt < 3) {
+                    const delay = attempt * (attempt === 1 ? 1000 : 3000);
+                    console.log(`Retrying chat in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    // If it failed mid-stream or with session error, we might want a fresh session
+                    if (attempt === 2) session = null; 
+                    return await trySendMessage(attempt + 1);
+                }
+                
+                let errorMsg = "Si è verificato un errore nella chat.";
+                if (err.message?.includes("safety")) {
+                    errorMsg = "La richiesta è stata bloccata dai filtri di sicurezza dell'IA. Prova a riformulare.";
+                } else if (err.message?.includes("429")) {
+                    errorMsg = "Limite di messaggi raggiunto (Quota). Riprova tra un minuto.";
+                } else {
+                    errorMsg = `Errore di connessione: ${err.message || "Risposta non ricevuta"}. Riprova tra poco.`;
+                }
+                
+                showNotification(errorMsg, "error");
+                
+                // Revert history on fatal failure to allow clean retry
+                dispatch({ type: 'SET_DATA', payload: { key: 'chatHistory', value: historyBeforeMessage } });
+                dispatch({ type: 'SET_DATA', payload: { key: 'chatSession', value: null } });
+                
+                return false;
             }
-        } catch (err: any) {
-            showNotification(err.message || "Errore chat.", "error");
-        } finally {
-            dispatch({ type: 'SET_CHAT_LOADING', payload: false });
-        }
+        };
+
+        const success = await trySendMessage();
+        dispatch({ type: 'SET_CHAT_LOADING', payload: false });
+        return success;
     }, [state.chatSession, state.chatHistory, state.isChatLoading, state.activeVehicle, showNotification]);
 
     const handleClearActiveChat = () => {

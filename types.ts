@@ -2,6 +2,7 @@
 import { Type, Content } from '@google/genai';
 
 export enum AiMode {
+    Dashboard = 'Dashboard',
     TripPlanner = 'TripPlanner',
     VirtualMechanic = 'VirtualMechanic',
     Garage = 'Garage',
