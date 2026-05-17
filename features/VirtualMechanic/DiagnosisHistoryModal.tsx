@@ -1,7 +1,7 @@
 import React from 'react';
 import { XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { SavedDiagnosis } from '../../types';
-import { useEscapeKey } from '../../utils/hooks';
+import { useEscapeKey } from '../../src/utils/hooks';
 
 interface DiagnosisHistoryModalProps {
     show: boolean;

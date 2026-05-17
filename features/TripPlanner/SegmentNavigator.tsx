@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { createNavigationSegments, generateGpxFile, downloadFile } from '../../utils/mapsHelpers';
+import { createNavigationSegments, generateGpxFile, downloadFile } from '../../src/utils/mapsHelpers';
 import { Day } from '../../types';
-import { useEscapeKey } from '../../utils/hooks';
+import { useEscapeKey } from '../../src/utils/hooks';
 import { XMarkIcon, ArrowRightIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 
@@ -89,7 +89,7 @@ export const SegmentNavigator: React.FC<SegmentNavigatorProps> = ({ day, onClose
                     </div>
                     
                     <div className="space-y-3">
-                        {segments.map((segment, index) => {
+                        {segments.map((segment: any, index: number) => {
                             const isActive = index === currentSegment;
                             const isCompleted = index < currentSegment;
 

@@ -1,20 +1,19 @@
 
 import React from 'react';
 import { CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
-import { useAppContext } from '../state/AppContext';
+import { useUIStore } from '../src/store/useUIStore';
 
 const Notification: React.FC = () => {
-    const { state, dispatch } = useAppContext();
-    const { notification } = state;
+    const { notification, hideNotification } = useUIStore();
 
     React.useEffect(() => {
         if (notification) {
             const timer = setTimeout(() => {
-                dispatch({ type: 'SET_NOTIFICATION', payload: null });
+                hideNotification();
             }, 3000);
             return () => clearTimeout(timer);
         }
-    }, [notification, dispatch]);
+    }, [notification, hideNotification]);
 
     if (!notification) {
         return null;
@@ -53,7 +52,7 @@ const Notification: React.FC = () => {
             <Icon className="w-6 h-6 flex-shrink-0" />
             <p className="text-sm font-semibold">{notification.message}</p>
             <button 
-                onClick={() => dispatch({ type: 'SET_NOTIFICATION', payload: null })}
+                onClick={hideNotification}
                 className="ml-auto -mr-1 p-1 rounded-full hover:bg-white/20 transition-colors"
                 aria-label="Chiudi notifica"
             >

@@ -7,10 +7,14 @@ import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
 import WeatherIcon from '../../components/WeatherIcon';
 import InfoBlock from '../../components/InfoBlock';
+
+// Stores
+import { useTripStore } from '../../src/store/useTripStore';
+import { useUIStore } from '../../src/store/useUIStore';
+
 import TripHistoryModal from './TripHistoryModal';
-import { useAppContext } from '../../state/AppContext';
-import { createNavigationSegments, generateGpxFile, generateFullTripGpx, downloadFile } from '../../utils/mapsHelpers';
-import { useEscapeKey } from '../../utils/hooks';
+import { createNavigationSegments, generateGpxFile, generateFullTripGpx, downloadFile } from '../../src/utils/mapsHelpers';
+import { useEscapeKey } from '../../src/utils/hooks';
 import SegmentNavigator from './SegmentNavigator';
 import Tooltip from '../../components/Tooltip';
 
@@ -109,29 +113,25 @@ const TripMapOptionsModal: React.FC<{
 
 const TripPlanner: React.FC = () => {
     const { 
-        state, 
-        dispatch, 
-        handleTripSubmit,
-        saveItinerary,
-        handleSaveAndReset,
-        handleResetForm,
-        loadLastItinerary,
-        handleDownloadPdf,
-        loadTripFromHistory,
-        deleteTripFromHistory,
-        exportTripHistory,
-        importTripHistory
-    } = useAppContext();
-
-    const {
-        drafts,
-        itinerary,
-        isGeneratingItinerary,
-        isGeneratingPdf,
-        savedConfirmation,
         tripHistory,
-        tripMaintenanceAlerts
-    } = state;
+        itinerary,
+        draft,
+        updateDraft,
+        generateTrip,
+        saveItinerary,
+        resetPlanner,
+        loadTripFromHistory,
+        deleteTrip,
+        exportHistory,
+        importHistory,
+        downloadPdf,
+    } = useTripStore();
+
+    const { 
+        isGeneratingItinerary, 
+        isGeneratingPdf, 
+        notification 
+    } = useUIStore();
 
     const {
         tripType,
@@ -145,7 +145,7 @@ const TripPlanner: React.FC = () => {
         customRoadPreferenceText,
         customPrompt,
         mapImages,
-    } = drafts.tripPlanner;
+    } = draft;
 
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
@@ -171,7 +171,7 @@ const TripPlanner: React.FC = () => {
     }, [mapImages]);
 
     const setDraftValue = (field: string, value: any) => {
-        dispatch({ type: 'UPDATE_TRIP_DRAFT', payload: { [field]: value } });
+        updateDraft({ [field]: value });
     };
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
@@ -273,6 +273,11 @@ const TripPlanner: React.FC = () => {
         setIsMapOptionsModalOpen(true);
     };
 
+    const handleTripSubmitLocal = (e: React.FormEvent) => {
+        e.preventDefault();
+        generateTrip();
+    };
+
     return (
         <div>
             {mapOptions && (
@@ -284,7 +289,15 @@ const TripPlanner: React.FC = () => {
                     onDownloadGpx={mapOptions.onDownloadGpx}
                 />
             )}
-            <TripHistoryModal show={showHistory} onClose={() => setShowHistory(false)} history={tripHistory} onLoad={loadTripFromHistory} onDelete={deleteTripFromHistory} onExport={exportTripHistory} onImport={importTripHistory}/>
+            <TripHistoryModal 
+                show={showHistory} 
+                onClose={() => setShowHistory(false)} 
+                history={tripHistory} 
+                onLoad={loadTripFromHistory} 
+                onDelete={deleteTrip} 
+                onExport={exportHistory} 
+                onImport={importHistory}
+            />
             {showSegmentNav && selectedDayForNav && (
                 <SegmentNavigator
                     day={selectedDayForNav}
@@ -293,11 +306,11 @@ const TripPlanner: React.FC = () => {
             )}
 
             <div className="flex justify-center bg-gray-700 rounded-full p-1 mb-6 max-w-sm mx-auto">
-                <button onClick={() => setDraftValue('tripType', 'itinerary')} className={`px-4 py-1.5 w-1/2 rounded-full text-sm font-semibold transition ${tripType === 'itinerary' ? 'bg-blue-600 text-white' : 'text-gray-300'}`}>Itinerario A/R</button>
-                <button onClick={() => setDraftValue('tripType', 'tour')} className={`px-4 py-1.5 w-1/2 rounded-full text-sm font-semibold transition ${tripType === 'tour' ? 'bg-blue-600 text-white' : 'text-gray-300'}`}>Tour</button>
+                <button type="button" onClick={() => setDraftValue('tripType', 'itinerary')} className={`px-4 py-1.5 w-1/2 rounded-full text-sm font-semibold transition ${tripType === 'itinerary' ? 'bg-blue-600 text-white' : 'text-gray-300'}`}>Itinerario A/R</button>
+                <button type="button" onClick={() => setDraftValue('tripType', 'tour')} className={`px-4 py-1.5 w-1/2 rounded-full text-sm font-semibold transition ${tripType === 'tour' ? 'bg-blue-600 text-white' : 'text-gray-300'}`}>Tour</button>
             </div>
 
-            <form onSubmit={handleTripSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <form onSubmit={handleTripSubmitLocal} className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 {tripType === 'itinerary' ? (
                     <>
                         <InputField id="departure" label="Luogo di Partenza" value={departure} onChange={(e) => setDraftValue('departure', e.target.value)} placeholder="Es. Milano" required />
@@ -400,13 +413,8 @@ const TripPlanner: React.FC = () => {
                         <ActionButton type="submit" loading={isGeneratingItinerary} loadingText="Generazione...">Crea Itinerario</ActionButton>
                     </Tooltip>
                     <Tooltip text="Pulisce tutti i campi e l'itinerario corrente per iniziare una nuova pianificazione">
-                        <ActionButton onClick={handleResetForm} disabled={isGeneratingItinerary} className="bg-gray-700 hover:bg-gray-600">
+                        <ActionButton onClick={resetPlanner} disabled={isGeneratingItinerary} className="bg-gray-700 hover:bg-gray-600">
                             <ArrowPathIcon className="w-5 h-5"/> Nuovo
-                        </ActionButton>
-                    </Tooltip>
-                    <Tooltip text="Ricarica l'ultimo itinerario che hai salvato o generato">
-                        <ActionButton onClick={loadLastItinerary} disabled={isGeneratingItinerary || tripHistory.length === 0} className="bg-blue-900/50 hover:bg-blue-800/50 border border-blue-700">
-                            <ClockIcon className="w-5 h-5"/>Carica Ultimo
                         </ActionButton>
                     </Tooltip>
                     <Tooltip text="Visualizza, carica o elimina i viaggi salvati in precedenza">
@@ -426,15 +434,6 @@ const TripPlanner: React.FC = () => {
             
             {itinerary && !isGeneratingItinerary && (
                 <div className="mt-6 animate-fade-in">
-                    {tripMaintenanceAlerts.length > 0 && (
-                        <div className="bg-yellow-500/20 text-yellow-300 p-4 rounded-md mb-6 shadow-lg" aria-live="polite">
-                            <h4 className="font-bold flex items-center gap-2 text-yellow-200"><BellAlertIcon className="w-6 h-6"/> Attenzione Manutenzione!</h4>
-                            <ul className="list-disc list-inside mt-2 ml-2 text-sm">
-                                {tripMaintenanceAlerts.map((alert: any, i: number) => <li key={i}>{alert}</li>)}
-                            </ul>
-                        </div>
-                    )}
-
                     <div id="itinerary-content">
                         <div className="flex justify-between items-start mb-4 flex-wrap gap-2">
                             <div className="flex-1">
@@ -442,15 +441,12 @@ const TripPlanner: React.FC = () => {
                                 <p className="text-gray-400 mt-1">{itinerary.generalDescription}</p>
                             </div>
                             <div className="flex gap-2 items-center flex-wrap self-start">
-                                {savedConfirmation && <span className="text-green-400 text-sm animate-pulse mr-2">{savedConfirmation}</span>}
+                                {notification?.message?.toLowerCase().includes('salvato') && <span className="text-green-400 text-sm animate-pulse mr-2">{notification.message}</span>}
                                 <Tooltip text="Salva le modifiche all'itinerario corrente o aggiungilo allo storico">
                                     <ActionButton onClick={saveItinerary}><ArchiveBoxIcon className="w-5 h-5"/> Salva</ActionButton>
                                 </Tooltip>
-                                <Tooltip text="Salva l'itinerario e pulisce i moduli per iniziare una nuova pianificazione">
-                                    <ActionButton onClick={handleSaveAndReset} className="bg-indigo-600 hover:bg-indigo-500"><DocumentPlusIcon className="w-5 h-5"/> Salva e Nuovo</ActionButton>
-                                </Tooltip>
                                 <Tooltip text="Esporta l'itinerario in un file PDF stampabile">
-                                    <ActionButton onClick={handleDownloadPdf} loading={isGeneratingPdf} loadingText="Creando..." className="bg-teal-600 hover:bg-teal-500">
+                                    <ActionButton onClick={downloadPdf} loading={isGeneratingPdf} loadingText="Creando..." className="bg-teal-600 hover:bg-teal-500">
                                         <ArrowDownTrayIcon className="w-5 h-5"/> Scarica PDF
                                     </ActionButton>
                                 </Tooltip>

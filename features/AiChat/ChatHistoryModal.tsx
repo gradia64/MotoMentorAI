@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { XMarkIcon, TrashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
-import { useEscapeKey } from '../../utils/hooks';
+import { useEscapeKey } from '../../src/utils/hooks';
 import { SavedChat } from '../../types';
 import ActionButton from '../../components/ActionButton';
 

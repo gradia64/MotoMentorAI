@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { XMarkIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { SavedTrip } from '../../types';
 import ActionButton from '../../components/ActionButton';
-import { useEscapeKey } from '../../utils/hooks';
+import { useEscapeKey } from '../../src/utils/hooks';
 
 interface TripHistoryModalProps {
     show: boolean;

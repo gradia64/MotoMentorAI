@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { useAppContext } from '../state/AppContext';
+import { useAuthStore } from '../src/store/useAuthStore';
 import Logo from './Logo';
 
 export const Login: React.FC = () => {
-    const { loginWithGoogle, loginWithGoogleRedirect, signUpWithEmail, loginWithEmail, resetPassword } = useAppContext();
+    const { loginWithGoogle, loginWithGoogleRedirect, signUpWithEmail, loginWithEmail, resetPassword } = useAuthStore();
     const [error, setError] = useState<React.ReactNode>('');
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');

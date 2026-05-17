@@ -1,0 +1,60 @@
+
+import { create } from 'zustand';
+import { AiMode } from '../../types';
+
+interface Notification {
+    message: string;
+    type: 'success' | 'error' | 'warning';
+}
+
+interface UIState {
+    mode: AiMode;
+    notification: Notification | null;
+    isLoadingData: boolean;
+    isGeneratingItinerary: boolean;
+    isDiagnosingProblem: boolean;
+    isGeneratingChecklist: boolean;
+    isChatLoading: boolean;
+    isGeneratingPdf: boolean;
+    isGeneratingDiagnosisPdf: boolean;
+    isGeneratingChecklistPdf: boolean;
+    isGeneratingDiarySummary: boolean;
+    error: string | null;
+    
+    // Actions
+    setMode: (mode: AiMode) => void;
+    showNotification: (message: string, type?: 'success' | 'error' | 'warning') => void;
+    hideNotification: () => void;
+    setLoading: (key: keyof UIState, value: boolean) => void;
+    setError: (error: string | null) => void;
+}
+
+export const useUIStore = create<UIState>((set) => ({
+    mode: AiMode.Dashboard,
+    notification: null,
+    isLoadingData: false,
+    isGeneratingItinerary: false,
+    isDiagnosingProblem: false,
+    isGeneratingChecklist: false,
+    isChatLoading: false,
+    isGeneratingPdf: false,
+    isGeneratingDiagnosisPdf: false,
+    isGeneratingChecklistPdf: false,
+    isGeneratingDiarySummary: false,
+    error: null,
+
+    setMode: (mode) => set({ mode }),
+    
+    showNotification: (message, type = 'success') => {
+        set({ notification: { message, type } });
+        setTimeout(() => {
+            set({ notification: null });
+        }, 5000);
+    },
+    
+    hideNotification: () => set({ notification: null }),
+    
+    setLoading: (key, value) => set({ [key]: value } as any),
+    
+    setError: (error) => set({ error }),
+}));

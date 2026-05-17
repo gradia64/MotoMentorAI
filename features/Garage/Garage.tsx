@@ -4,8 +4,12 @@ import { GarageVehicle } from '../../types';
 import { TrashIcon, XMarkIcon, PencilSquareIcon, PhotoIcon, ExclamationTriangleIcon, CalendarDaysIcon, DocumentTextIcon, ClipboardDocumentListIcon, TruckIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
-import { useAppContext } from '../../state/AppContext';
-import { useEscapeKey } from '../../utils/hooks';
+
+// Stores
+import { useGarageStore } from '../../src/store/useGarageStore';
+import { useUIStore } from '../../src/store/useUIStore';
+
+import { useEscapeKey } from '../../src/utils/hooks';
 import Tooltip from '../../components/Tooltip';
 
 // Helper to convert file to base64
@@ -117,7 +121,7 @@ const EditVehicleModal: React.FC<{
     onSave: (updatedVehicle: GarageVehicle) => void;
     onClose: () => void;
 }> = ({ vehicle, onSave, onClose }) => {
-    const { handleGenerateSpecs } = useAppContext();
+    const { handleGenerateSpecs } = useGarageStore();
     const [formData, setFormData] = useState<GarageVehicle>(vehicle);
     const [photoPreview, setPhotoPreview] = useState<string | undefined>(vehicle.photo);
     const [activeTab, setActiveTab] = useState<'info' | 'specs' | 'docs' | 'notes'>('info');
@@ -308,8 +312,7 @@ const EditVehicleModal: React.FC<{
 
 
 const Garage: React.FC = () => {
-    const { state, handleAddVehicle, handleUpdateVehicle, handleDeleteVehicle, handleSetActiveVehicle } = useAppContext();
-    const { garageVehicles, activeVehicle } = state;
+    const { garageVehicles, activeVehicle, addVehicle, updateVehicle, deleteVehicle, setActiveVehicle } = useGarageStore();
     
     const [newVehicle, setNewVehicle] = useState({ model: '', year: '', kilometers: '' });
     const [editingVehicle, setEditingVehicle] = useState<GarageVehicle | null>(null);
@@ -323,7 +326,7 @@ const Garage: React.FC = () => {
 
     const confirmDelete = () => {
         if (vehicleToDelete) {
-            handleDeleteVehicle(vehicleToDelete);
+            deleteVehicle(vehicleToDelete);
         }
     };
 
@@ -333,7 +336,7 @@ const Garage: React.FC = () => {
             alert("Compila almeno Modello, Anno e Chilometri.");
             return;
         }
-        handleAddVehicle(newVehicle);
+        addVehicle(newVehicle);
         setNewVehicle({ model: '', year: '', kilometers: '' });
     };
 
@@ -343,7 +346,7 @@ const Garage: React.FC = () => {
     
     return (
     <div className="animate-fade-in">
-        {editingVehicle && <EditVehicleModal vehicle={editingVehicle} onSave={handleUpdateVehicle} onClose={() => setEditingVehicle(null)} />}
+        {editingVehicle && <EditVehicleModal vehicle={editingVehicle} onSave={updateVehicle} onClose={() => setEditingVehicle(null)} />}
         <ConfirmationModal
             isOpen={isDeleteModalOpen}
             onClose={() => setIsDeleteModalOpen(false)}
@@ -429,7 +432,7 @@ const Garage: React.FC = () => {
                                     <div className="mt-4 pt-4 border-t border-gray-700 flex items-center justify-between gap-2">
                                         <div className="flex gap-2">
                                             <Tooltip text={isActive ? "Questo veicolo è già attivo per le funzioni AI" : "Usa questo veicolo per Planner, Meccanico e Chat"}>
-                                                <button onClick={() => handleSetActiveVehicle(v.id)} disabled={isActive} className="text-xs py-1.5 px-4 rounded-md font-semibold transition-colors bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-default text-white">
+                                                <button onClick={() => setActiveVehicle(v.id)} disabled={isActive} className="text-xs py-1.5 px-4 rounded-md font-semibold transition-colors bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-default text-white">
                                                     {isActive ? 'In Uso' : 'Seleziona'}
                                                 </button>
                                             </Tooltip>

@@ -3,16 +3,21 @@ import React, { Suspense, lazy, useEffect } from 'react';
 import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, ClockIcon, BookOpenIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 
 import { AiMode } from './types';
-import { AppProvider, useAppContext } from './state/AppContext';
 import TabButton from './components/TabButton';
 import Notification from './components/Notification';
 import Logo from './components/Logo';
 import Login from './components/Login';
 import { motion } from 'motion/react';
 
+// Stores
+import { useUIStore } from './src/store/useUIStore';
+import { useAuthStore } from './src/store/useAuthStore';
+import { useGarageStore } from './src/store/useGarageStore';
+import { useTripStore } from './src/store/useTripStore';
+import { useMechanicStore } from './src/store/useMechanicStore';
+import { useChatStore } from './src/store/useChatStore';
+
 // --- Lazy Loading of Feature Components ---
-// This enables Code Splitting: each feature is bundled separately and 
-// only downloaded when the user switches to that specific tab.
 const TripPlanner = lazy(() => import('./features/TripPlanner/TripPlanner'));
 const VirtualMechanic = lazy(() => import('./features/VirtualMechanic/VirtualMechanic'));
 const Garage = lazy(() => import('./features/Garage/Garage'));
@@ -36,7 +41,13 @@ const SectionLoader: React.FC = () => (
 );
 
 const AppContent: React.FC = () => {
-    const { state, dispatch, checkAuth, logout } = useAppContext();
+    const { mode, setMode, error } = useUIStore();
+    const { user, isAuthenticated, isCheckingAuth, checkAuth, logout } = useAuthStore();
+    const { activeVehicle, deadlineAlerts, initGarage } = useGarageStore();
+    const { initTrips } = useTripStore();
+    const { initMechanic } = useMechanicStore();
+    const { initChats } = useChatStore();
+    
     const [fatalError, setFatalError] = React.useState<string | null>(null);
 
     useEffect(() => {
@@ -52,22 +63,28 @@ const AppContent: React.FC = () => {
 
         checkAuth();
 
-        // Safety redundancy: ensure we don't stay in loading forever
-        const backupTimer = setTimeout(() => {
-            if (state.isCheckingAuth) {
-                console.warn("AppContent: forcing isCheckingAuth to false as backup");
-                dispatch({ type: 'SET_CHECKING_AUTH', payload: false });
-            }
-        }, 12000);
-
         return () => {
             window.removeEventListener('error', handleError);
             window.removeEventListener('unhandledrejection', handleRejection);
-            clearTimeout(backupTimer);
         };
     }, []);
 
-    const setMode = (mode: AiMode) => dispatch({ type: 'SET_MODE', payload: mode });
+    // Initialize/Cleanup shop listeners based on user session
+    useEffect(() => {
+        if (user && isAuthenticated) {
+            const unsubGarage = initGarage(user.id);
+            const unsubTrips = initTrips(user.id);
+            const unsubMechanic = initMechanic(user.id);
+            const unsubChats = initChats(user.id);
+            
+            return () => {
+                unsubGarage();
+                unsubTrips();
+                unsubMechanic();
+                unsubChats();
+            };
+        }
+    }, [user, isAuthenticated]);
 
     if (fatalError) {
         return (
@@ -92,7 +109,7 @@ const AppContent: React.FC = () => {
         );
     }
 
-    if (state.isCheckingAuth) {
+    if (isCheckingAuth) {
         return (
             <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
                 <motion.div 
@@ -117,21 +134,16 @@ const AppContent: React.FC = () => {
                         >
                             Ricarica Pagina
                         </button>
-                        <button 
-                            onClick={() => dispatch({ type: 'SET_CHECKING_AUTH', payload: false })}
-                            className="text-[10px] text-white/20 hover:text-white/40 underline uppercase tracking-widest"
-                        >
-                            Forza avvio sessione
-                        </button>
                     </div>
                 </motion.div>
             </div>
         );
     }
 
-    if (!state.isAuthenticated) {
+    if (!isAuthenticated) {
         return <Login />;
     }
+
     return (
         <div className="bg-slate-900 text-white min-h-screen font-sans pb-20 md:pb-0">
             <Notification />
@@ -146,14 +158,14 @@ const AppContent: React.FC = () => {
                     </button>
 
                     <div className="flex items-center gap-2 md:gap-5">
-                        {state.activeVehicle && (
+                        {activeVehicle && (
                             <div 
                                 className="flex items-center gap-2 bg-gray-900/50 border border-gray-700 px-3 py-1.5 rounded-full cursor-pointer hover:bg-gray-700 transition-all"
                                 onClick={() => setMode(AiMode.Garage)}
                             >
                                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                                 <span className="text-[10px] md:text-xs font-bold truncate max-w-[80px] md:max-w-[150px]">
-                                    {state.activeVehicle.model}
+                                    {activeVehicle.model}
                                 </span>
                             </div>
                         )}
@@ -161,7 +173,7 @@ const AppContent: React.FC = () => {
                         <div className="flex items-center gap-3 border-l border-gray-700 pl-3 md:pl-5">
                             <div className="text-right hidden md:block">
                                 <p className="text-[10px] text-gray-500 uppercase font-bold">Utente</p>
-                                <p className="text-xs font-medium text-white">{state.user?.username}</p>
+                                <p className="text-xs font-medium text-white">{user?.username}</p>
                             </div>
                             <button 
                                 onClick={logout}
@@ -176,61 +188,58 @@ const AppContent: React.FC = () => {
             </header>
 
             <main className="container mx-auto p-4 md:p-8">
-                {/* Global Alert Indicator (Simple badge if there are alerts and not on Dashboard) */}
-                {state.deadlineAlerts.length > 0 && state.mode !== AiMode.Dashboard && (
+                {deadlineAlerts.length > 0 && mode !== AiMode.Dashboard && (
                     <div 
                         className="mb-6 bg-red-900/30 border border-red-500/50 p-3 rounded-xl flex items-center justify-between animate-fade-in cursor-pointer hover:bg-red-900/40 transition-colors"
                         onClick={() => setMode(AiMode.Dashboard)}
                     >
                         <div className="flex items-center gap-3">
                             <ExclamationTriangleIcon className="w-5 h-5 text-red-500" />
-                            <p className="text-sm font-medium">Hai {state.deadlineAlerts.length} scadenze amministrative da verificare.</p>
+                            <p className="text-sm font-medium">Hai {deadlineAlerts.length} scadenze amministrative da verificare.</p>
                         </div>
                         <span className="text-[10px] bg-red-500 text-white font-bold px-2 py-0.5 rounded uppercase">Controlla</span>
                     </div>
                 )}
 
                 <div className="bg-gray-800/80 rounded-2xl shadow-2xl overflow-hidden border border-gray-700/50 min-h-[60vh]">
-                    {/* Desktop Navigation Tabs */}
                     <div className="hidden md:flex bg-gray-900/50 border-b border-gray-700 px-2">
-                        <TabButton text="Home" icon={<CogIcon className="w-5 h-5"/>} active={state.mode === AiMode.Dashboard} onClick={() => setMode(AiMode.Dashboard)} />
-                        <TabButton text="Planner" icon={<MapPinIcon className="w-5 h-5"/>} active={state.mode === AiMode.TripPlanner} onClick={() => setMode(AiMode.TripPlanner)} />
-                        <TabButton text="Diario" icon={<BookOpenIcon className="w-5 h-5"/>} active={state.mode === AiMode.TripDiary} onClick={() => setMode(AiMode.TripDiary)} />
-                        <TabButton text="Meccanico" icon={<WrenchScrewdriverIcon className="w-5 h-5"/>} active={state.mode === AiMode.VirtualMechanic} onClick={() => setMode(AiMode.VirtualMechanic)} />
-                        <TabButton text="Garage" icon={<CogIcon className="w-5 h-5"/>} active={state.mode === AiMode.Garage} onClick={() => setMode(AiMode.Garage)} />
-                        <TabButton text="Chat IA" icon={<ChatBubbleLeftRightIcon className="w-5 h-5"/>} active={state.mode === AiMode.AiChat} onClick={() => setMode(AiMode.AiChat)} />
+                        <TabButton text="Home" icon={<CogIcon className="w-5 h-5"/>} active={mode === AiMode.Dashboard} onClick={() => setMode(AiMode.Dashboard)} />
+                        <TabButton text="Planner" icon={<MapPinIcon className="w-5 h-5"/>} active={mode === AiMode.TripPlanner} onClick={() => setMode(AiMode.TripPlanner)} />
+                        <TabButton text="Diario" icon={<BookOpenIcon className="w-5 h-5"/>} active={mode === AiMode.TripDiary} onClick={() => setMode(AiMode.TripDiary)} />
+                        <TabButton text="Meccanico" icon={<WrenchScrewdriverIcon className="w-5 h-5"/>} active={mode === AiMode.VirtualMechanic} onClick={() => setMode(AiMode.VirtualMechanic)} />
+                        <TabButton text="Garage" icon={<CogIcon className="w-5 h-5"/>} active={mode === AiMode.Garage} onClick={() => setMode(AiMode.Garage)} />
+                        <TabButton text="Chat IA" icon={<ChatBubbleLeftRightIcon className="w-5 h-5"/>} active={mode === AiMode.AiChat} onClick={() => setMode(AiMode.AiChat)} />
                     </div>
 
                     <div className="p-4 md:p-8">
-                        {state.error && (
+                        {error && (
                             <div 
                                 className="bg-red-500/20 text-red-300 p-4 border-l-4 border-red-500 rounded-md mb-6 animate-fade-in flex items-center gap-3" 
                                 role="alert"
                             >
                                 <ExclamationTriangleIcon className="w-5 h-5" />
-                                <span className="text-sm font-medium">{state.error}</span>
+                                <span className="text-sm font-medium">{error}</span>
                             </div>
                         )}
 
                         <Suspense fallback={<SectionLoader />}>
-                            {state.mode === AiMode.Dashboard && <Dashboard />}
-                            {state.mode === AiMode.TripPlanner && <TripPlanner />}
-                            {state.mode === AiMode.TripDiary && <TripDiary />}
-                            {state.mode === AiMode.VirtualMechanic && <VirtualMechanic />}
-                            {state.mode === AiMode.Garage && <Garage />}
-                            {state.mode === AiMode.AiChat && <AiChat />}
+                            {mode === AiMode.Dashboard && <Dashboard />}
+                            {mode === AiMode.TripPlanner && <TripPlanner />}
+                            {mode === AiMode.TripDiary && <TripDiary />}
+                            {mode === AiMode.VirtualMechanic && <VirtualMechanic />}
+                            {mode === AiMode.Garage && <Garage />}
+                            {mode === AiMode.AiChat && <AiChat />}
                         </Suspense>
                     </div>
                 </div>
             </main>
 
-            {/* Mobile Bottom Navigation */}
             <nav className="md:hidden fixed bottom-6 left-6 right-6 z-50 bg-gray-800/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl px-2 py-2 flex items-center justify-around">
-                <NavIcon active={state.mode === AiMode.Dashboard} onClick={() => setMode(AiMode.Dashboard)} icon={<CogIcon className="w-6 h-6" />} label="Home" />
-                <NavIcon active={state.mode === AiMode.TripPlanner} onClick={() => setMode(AiMode.TripPlanner)} icon={<MapPinIcon className="w-6 h-6" />} label="Viaggi" />
-                <NavIcon active={state.mode === AiMode.VirtualMechanic} onClick={() => setMode(AiMode.VirtualMechanic)} icon={<WrenchScrewdriverIcon className="w-6 h-6" />} label="Mecc" />
-                <NavIcon active={state.mode === AiMode.Garage} onClick={() => setMode(AiMode.Garage)} icon={<CogIcon className="w-6 h-6" />} label="Garage" />
-                <NavIcon active={state.mode === AiMode.AiChat} onClick={() => setMode(AiMode.AiChat)} icon={<ChatBubbleLeftRightIcon className="w-6 h-6" />} label="Chat" />
+                <NavIcon active={mode === AiMode.Dashboard} onClick={() => setMode(AiMode.Dashboard)} icon={<CogIcon className="w-6 h-6" />} label="Home" />
+                <NavIcon active={mode === AiMode.TripPlanner} onClick={() => setMode(AiMode.TripPlanner)} icon={<MapPinIcon className="w-6 h-6" />} label="Viaggi" />
+                <NavIcon active={mode === AiMode.VirtualMechanic} onClick={() => setMode(AiMode.VirtualMechanic)} icon={<WrenchScrewdriverIcon className="w-6 h-6" />} label="Mecc" />
+                <NavIcon active={mode === AiMode.Garage} onClick={() => setMode(AiMode.Garage)} icon={<CogIcon className="w-6 h-6" />} label="Garage" />
+                <NavIcon active={mode === AiMode.AiChat} onClick={() => setMode(AiMode.AiChat)} icon={<ChatBubbleLeftRightIcon className="w-6 h-6" />} label="Chat" />
             </nav>
 
             <footer className="text-center py-10 px-4 text-sm text-gray-500">
@@ -258,13 +267,11 @@ const NavIcon: React.FC<{ active: boolean; onClick: () => void; icon: React.Reac
     </button>
 );
 
-
 const App: React.FC = () => {
     return (
-        <AppProvider>
-            <AppContent />
-        </AppProvider>
+        <AppContent />
     );
 };
 
 export default App;
+

@@ -1,6 +1,5 @@
 
 import React from 'react';
-import { useAppContext } from '../../state/AppContext';
 import { AiMode } from '../../types';
 import { 
     MapPinIcon, 
@@ -9,20 +8,22 @@ import {
     ChatBubbleLeftRightIcon, 
     BookOpenIcon,
     ExclamationTriangleIcon,
-    ClockIcon,
-    CalendarIcon,
     ChevronRightIcon,
     PlusIcon
 } from '@heroicons/react/24/outline';
 import { motion } from 'motion/react';
 
+// Stores
+import { useUIStore } from '../../src/store/useUIStore';
+import { useGarageStore } from '../../src/store/useGarageStore';
+import { useTripStore } from '../../src/store/useTripStore';
+
 const Dashboard: React.FC = () => {
-    const { state, dispatch } = useAppContext();
+    const { setMode } = useUIStore();
+    const { activeVehicle, deadlineAlerts } = useGarageStore();
+    const { tripHistory } = useTripStore();
 
-    const setMode = (mode: AiMode) => dispatch({ type: 'SET_MODE', payload: mode });
-
-    const activeVehicle = state.activeVehicle;
-    const lastTrip = state.tripHistory.length > 0 ? state.tripHistory[0] : null;
+    const lastTrip = tripHistory.length > 0 ? tripHistory[0] : null;
 
     return (
         <div className="space-y-10 animate-fade-in max-w-6xl mx-auto">
@@ -52,7 +53,7 @@ const Dashboard: React.FC = () => {
                                     <div className="w-px h-8 bg-white/10 hidden sm:block"></div>
                                     <div className="flex flex-col">
                                         <span className="text-[9px] uppercase text-gray-500 font-sans font-bold tracking-wider">Prossima Revisione</span>
-                                        <span className={`text-lg ${state.deadlineAlerts.some((a: any) => a.type === 'Revisione') ? 'text-red-400' : 'text-emerald-400'}`}>
+                                        <span className={`text-lg ${deadlineAlerts.some((a: any) => a.type === 'Revisione') ? 'text-red-400' : 'text-emerald-400'}`}>
                                             {activeVehicle.inspectionExpiry ? new Date(activeVehicle.inspectionExpiry).toLocaleDateString('it-IT') : 'N/D'}
                                         </span>
                                     </div>
@@ -124,7 +125,7 @@ const Dashboard: React.FC = () => {
                                 <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                                 <h3 className="text-xs font-black uppercase tracking-[0.3em] text-gray-500 italic font-serif">Road Book</h3>
                             </div>
-                            {state.tripHistory.length > 1 && (
+                            {tripHistory.length > 1 && (
                                 <button onClick={() => setMode(AiMode.TripDiary)} className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-white transition-colors">
                                     Archivio Completo
                                 </button>
@@ -174,9 +175,9 @@ const Dashboard: React.FC = () => {
                         <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-red-500 mb-6 flex items-center gap-2">
                             <ExclamationTriangleIcon className="w-4 h-4" /> System Alerts
                         </h3>
-                        {state.deadlineAlerts.length > 0 ? (
+                        {deadlineAlerts.length > 0 ? (
                             <div className="space-y-4">
-                                {state.deadlineAlerts.map((alert: any) => (
+                                {deadlineAlerts.map((alert: any) => (
                                     <motion.div 
                                         initial={{ opacity: 0, x: 20 }}
                                         animate={{ opacity: 1, x: 0 }}
@@ -259,3 +260,4 @@ const QuickAction: React.FC<QuickActionProps> = ({ icon, title, subtitle, color,
 );
 
 export default Dashboard;
+

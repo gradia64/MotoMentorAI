@@ -1,4 +1,4 @@
-import { Day, GpxPoint } from '../types';
+import { Day, GpxPoint } from '../../types';
 
 // Algoritmo Douglas-Peucker per semplificazione intelligente
 export const simplifyGpxTrack = (points: GpxPoint[], tolerance: number = 0.001): GpxPoint[] => {

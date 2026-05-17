@@ -1,7 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { BookOpenIcon, PencilSquareIcon, SparklesIcon, ArrowDownTrayIcon, CheckIcon } from '@heroicons/react/24/outline';
-import { useAppContext } from '../../state/AppContext';
+
+// Stores
+import { useTripStore } from '../../src/store/useTripStore';
+import { useUIStore } from '../../src/store/useUIStore';
+
 import SelectField from '../../components/SelectField';
 import ActionButton from '../../components/ActionButton';
 import Tooltip from '../../components/Tooltip';
@@ -9,13 +13,15 @@ import { DiaryEntry } from '../../types';
 
 const TripDiary: React.FC = () => {
     const { 
-        state, 
-        dispatch, 
-        handleUpdateTrip, 
-        handleGenerateDiarySummary,
-        handleDownloadDiaryPdf
-    } = useAppContext();
-    const { tripHistory, activeDiaryTripId, isGeneratingDiarySummary } = state;
+        tripHistory, 
+        activeDiaryTripId, 
+        updateTrip, 
+        updateDiarySummary, 
+        downloadDiaryPdf,
+        setActiveDiaryTrip
+    } = useTripStore();
+    
+    const { isGeneratingDiarySummary } = useUIStore();
 
     const [selectedDay, setSelectedDay] = useState<number>(1);
     const [currentNote, setCurrentNote] = useState<string>('');
@@ -33,7 +39,7 @@ const TripDiary: React.FC = () => {
     }, [activeTrip, selectedDay]);
 
     const handleTripSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        dispatch({ type: 'SET_ACTIVE_DIARY_TRIP', payload: e.target.value });
+        setActiveDiaryTrip(e.target.value);
         setSelectedDay(1); // Reset to day 1 on trip change
     };
 
@@ -56,7 +62,7 @@ const TripDiary: React.FC = () => {
         const updatedEntries = [...otherEntries, newEntry].sort((a, b) => a.day - b.day);
         const updatedTrip = { ...activeTrip, diaryEntries: updatedEntries };
 
-        handleUpdateTrip(updatedTrip);
+        updateTrip(updatedTrip);
         setUnsavedChanges(false);
     };
 
@@ -165,17 +171,17 @@ const TripDiary: React.FC = () => {
                                 <div className="flex gap-2">
                                     <Tooltip text="L'IA leggerà le tue note e l'itinerario per scrivere un racconto avvincente della tua avventura.">
                                         <ActionButton 
-                                            onClick={() => handleGenerateDiarySummary(activeTrip)} 
+                                            onClick={() => updateDiarySummary(activeTrip)} 
                                             loading={isGeneratingDiarySummary}
                                             loadingText="Scrivendo..."
                                             className="bg-purple-600 hover:bg-purple-500"
                                         >
-                                            <PencilSquareIcon className="w-5 h-5"/> {activeTrip.diarySummary ? 'Rigenera Racconto' : 'Genera Racconto'}
+                                            <SparklesIcon className="w-5 h-5"/> {activeTrip.diarySummary ? 'Rigenera Racconto' : 'Genera Racconto'}
                                         </ActionButton>
                                     </Tooltip>
                                     <Tooltip text="Scarica il diario completo in PDF (Itinerario + Note + Racconto)">
                                         <ActionButton 
-                                            onClick={() => handleDownloadDiaryPdf(activeTrip)}
+                                            onClick={() => downloadDiaryPdf(activeTrip)}
                                             className="bg-teal-600 hover:bg-teal-500"
                                         >
                                             <ArrowDownTrayIcon className="w-5 h-5"/> Scarica PDF

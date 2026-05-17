@@ -4,61 +4,63 @@ import ActionButton from '../../components/ActionButton';
 import MaintenanceLog from './MaintenanceLog';
 import MaintenanceList from './MaintenanceList';
 import DiagnosisHistoryModal from './DiagnosisHistoryModal';
-import { useAppContext } from '../../state/AppContext';
+
+// Stores
+import { useGarageStore } from '../../src/store/useGarageStore';
+import { useMechanicStore } from '../../src/store/useMechanicStore';
+import { useTripStore } from '../../src/store/useTripStore';
+import { useUIStore } from '../../src/store/useUIStore';
+
 import Tooltip from '../../components/Tooltip';
 
 
 const VirtualMechanic: React.FC = () => {
+    const { activeVehicle } = useGarageStore();
+    const { tripHistory } = useTripStore();
     const { 
-        state, 
-        dispatch,
-        handleMechanicSubmit,
-        handleAddMaintenanceRecord,
-        handleDeleteMaintenanceRecord,
-        handleAddReminder,
-        handleDeleteReminder,
-        handleSaveOrUpdateDiagnosis,
-        handleLoadDiagnosis,
-        handleDeleteDiagnosis,
-        handleDownloadDiagnosisPdf,
-        handleDownloadChecklistPdf,
-    } = useAppContext();
-    
-    const {
-        mechanicMode,
-        drafts,
-        activeVehicle,
-        diagnosis,
-        activeDiagnosisId,
-        maintenanceTips,
-        // Fix: Use specific loading states
-        isDiagnosingProblem,
-        isGeneratingChecklist,
-        maintenanceLog,
-        tripHistory,
-        reminders,
-        savedConfirmation,
-        savedDiagnoses,
-        isGeneratingDiagnosisPdf,
-        isGeneratingChecklistPdf,
-    } = state;
+        maintenanceLog, 
+        reminders, 
+        savedDiagnoses, 
+        diagnosis, 
+        activeDiagnosisId, 
+        maintenanceTips, 
+        mechanicMode, 
+        draft,
+        setMechanicMode,
+        updateDraft,
+        submitDiagnosis,
+        submitMaintenanceTips,
+        saveDiagnosis,
+        loadDiagnosis,
+        deleteDiagnosis,
+        addMaintenanceRecord,
+        deleteMaintenanceRecord,
+        addReminder,
+        deleteReminder,
+        downloadDiagnosisPdf,
+        downloadChecklistPdf
+    } = useMechanicStore();
 
-    const { problemDescription, problemImage } = drafts.virtualMechanic;
+    const { 
+        isDiagnosingProblem, 
+        isGeneratingChecklist, 
+        isGeneratingDiagnosisPdf, 
+        isGeneratingChecklistPdf,
+        notification
+    } = useUIStore();
+    
+    const { problemDescription, problemImage } = draft;
     
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const setMechanicMode = (mode: 'diagnose' | 'maintenance' | 'workshop') => {
-        dispatch({ type: 'SET_MECHANIC_MODE', payload: mode });
-    };
-
     const setProblemDescription = (value: string) => {
-        dispatch({ type: 'UPDATE_MECHANIC_DRAFT', payload: { problemDescription: value } });
+        updateDraft({ problemDescription: value });
     };
 
     const setProblemImage = (file: File | null) => {
-        dispatch({ type: 'UPDATE_MECHANIC_DRAFT', payload: { problemImage: file } });
+        updateDraft({ problemImage: file });
     };
 
     useEffect(() => {
@@ -85,14 +87,23 @@ const VirtualMechanic: React.FC = () => {
     // Determine the loading state based on the current mode
     const isLoading = mechanicMode === 'diagnose' ? isDiagnosingProblem : isGeneratingChecklist;
 
+    const handleMechanicSubmitLocal = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (mechanicMode === 'diagnose') {
+            submitDiagnosis();
+        } else {
+            submitMaintenanceTips();
+        }
+    };
+
     return (
     <div>
         <DiagnosisHistoryModal 
             show={showHistoryModal} 
             onClose={() => setShowHistoryModal(false)}
             history={vehicleDiagnoses}
-            onLoad={handleLoadDiagnosis}
-            onDelete={handleDeleteDiagnosis}
+            onLoad={loadDiagnosis}
+            onDelete={deleteDiagnosis}
         />
         <div className="flex justify-center bg-gray-700 rounded-full p-1 mb-6 max-w-lg mx-auto">
             <button onClick={() => setMechanicMode('workshop')} className={`flex items-center justify-center gap-2 px-4 py-1.5 w-1/3 rounded-full text-sm font-semibold transition ${mechanicMode === 'workshop' ? 'bg-blue-600 text-white' : 'text-gray-300'}`}><BookOpenIcon className="w-4 h-4"/>Officina</button>
@@ -103,11 +114,11 @@ const VirtualMechanic: React.FC = () => {
         {mechanicMode === 'workshop' ? (
             <MaintenanceLog 
                 log={maintenanceLog} 
-                onAdd={handleAddMaintenanceRecord} 
-                onDelete={handleDeleteMaintenanceRecord}
+                onAdd={addMaintenanceRecord} 
+                onDelete={deleteMaintenanceRecord}
                 reminders={reminders}
-                onAddReminder={handleAddReminder}
-                onDeleteReminder={handleDeleteReminder}
+                onAddReminder={addReminder}
+                onDeleteReminder={deleteReminder}
                 activeVehicle={activeVehicle}
             />
         ) : (
@@ -125,7 +136,7 @@ const VirtualMechanic: React.FC = () => {
                 </div>
             )}
 
-            <form onSubmit={handleMechanicSubmit} className="space-y-4">
+            <form onSubmit={handleMechanicSubmitLocal} className="space-y-4">
                  {activeVehicle && (
                     <div className="bg-gray-700/50 p-3 rounded-lg">
                         <p className="text-sm text-gray-400">Veicolo Attivo Selezionato:</p>
@@ -215,15 +226,15 @@ const VirtualMechanic: React.FC = () => {
                         <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                             <h3 className="text-xl font-bold text-white">Risultato Diagnosi</h3>
                             <div className="flex items-center gap-2 flex-wrap">
-                                {savedConfirmation && <span className="text-green-400 text-sm animate-pulse mr-2">{savedConfirmation}</span>}
+                                {notification?.message?.toLowerCase().includes('salvata') && <span className="text-green-400 text-sm animate-pulse mr-2">{notification.message}</span>}
                                 <Tooltip text={activeDiagnosisId ? 'Aggiorna la diagnosi salvata con il risultato corrente' : 'Salva questa diagnosi nello storico del veicolo'}>
-                                    <ActionButton onClick={handleSaveOrUpdateDiagnosis}>
+                                    <ActionButton onClick={saveDiagnosis}>
                                         <ArchiveBoxIcon className="w-5 h-5"/> {activeDiagnosisId ? 'Aggiorna' : 'Salva'} Diagnosi
                                     </ActionButton>
                                 </Tooltip>
                                 <Tooltip text="Esporta la diagnosi corrente in un file PDF">
                                     <ActionButton 
-                                        onClick={handleDownloadDiagnosisPdf} 
+                                        onClick={downloadDiagnosisPdf} 
                                         loading={isGeneratingDiagnosisPdf} 
                                         loadingText="Creando..."
                                         className="bg-teal-600 hover:bg-teal-500"
@@ -243,7 +254,7 @@ const VirtualMechanic: React.FC = () => {
                              <h3 className="text-xl font-bold text-white">Checklist Manutenzione</h3>
                              <Tooltip text="Esporta la checklist corrente in un file PDF">
                                 <ActionButton
-                                    onClick={handleDownloadChecklistPdf}
+                                    onClick={downloadChecklistPdf}
                                     loading={isGeneratingChecklistPdf}
                                     loadingText="Creando..."
                                     className="bg-teal-600 hover:bg-teal-500"

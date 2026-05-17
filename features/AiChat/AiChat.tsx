@@ -2,14 +2,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SparklesIcon, BookOpenIcon, TrashIcon, ArchiveBoxIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { PaperAirplaneIcon } from '@heroicons/react/24/solid';
-import { useAppContext } from '../../state/AppContext';
+
+// Stores
+import { useChatStore } from '../../src/store/useChatStore';
+import { useGarageStore } from '../../src/store/useGarageStore';
+import { useUIStore } from '../../src/store/useUIStore';
+
 import ChatHistoryModal from './ChatHistoryModal';
 import { ConfirmationModal } from '../Garage/Garage';
 import Tooltip from '../../components/Tooltip';
 
 const AiChat: React.FC = () => {
-    const { state, handleSendMessage, handleClearActiveChat, handleLoadChatHistory, handleSaveCurrentChat, handleDeleteSavedChat } = useAppContext();
-    const { activeVehicle, chatHistory, isChatLoading, savedChats, activeChatId } = state;
+    const { 
+        chatHistory, 
+        savedChats, 
+        activeChatId, 
+        sendMessage, 
+        clearActiveChat, 
+        loadChatHistory, 
+        saveCurrentChat, 
+        deleteSavedChat 
+    } = useChatStore();
+    const { activeVehicle } = useGarageStore();
+    const { isChatLoading } = useUIStore();
+
     const [input, setInput] = useState('');
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
@@ -28,7 +44,7 @@ const AiChat: React.FC = () => {
         const messageText = input.trim();
         if (messageText && !isChatLoading) {
             setInput(''); // Clear immediately for UX, but we can restore if it fails
-            const success = await handleSendMessage(messageText);
+            const success = await sendMessage(messageText);
             if (!success) {
                 setInput(messageText); // Restore input if it failed
             }
@@ -36,7 +52,7 @@ const AiChat: React.FC = () => {
     };
 
     const handleConfirmClear = () => {
-        handleClearActiveChat();
+        clearActiveChat();
         setIsClearConfirmOpen(false);
     };
 
@@ -74,8 +90,8 @@ const AiChat: React.FC = () => {
                 show={showHistoryModal} 
                 onClose={() => setShowHistoryModal(false)}
                 history={savedChats}
-                onLoad={handleLoadChatHistory}
-                onDelete={handleDeleteSavedChat}
+                onLoad={loadChatHistory}
+                onDelete={deleteSavedChat}
             />
             <div className="flex justify-between items-center mb-4">
                 <div>
@@ -89,7 +105,7 @@ const AiChat: React.FC = () => {
                 <div className="flex items-center gap-2">
                     <Tooltip text={activeChatId ? "Sovrascrivi questa chat nello storico" : "Salva questa sessione nello storico"}>
                         <button 
-                            onClick={handleSaveCurrentChat}
+                            onClick={saveCurrentChat}
                             disabled={chatHistory.length === 0 || isChatLoading}
                             className={`flex items-center gap-2 text-sm font-semibold text-white px-3 py-2 rounded-md transition-colors disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed ${activeChatId ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-green-700 hover:bg-green-600'}`}
                         >
