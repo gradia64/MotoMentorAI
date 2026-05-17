@@ -237,4 +237,21 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
                             <button onClick={() => onDeleteReminder(reminder.id)} className="text-gray-500 hover:text-red-400 transition-colors">
                                 <TrashIcon className="w-5 h-5" />
                             </button>
-                        </div>\n                    ))}\n                </div>\n             )}\n            </div>\n\n            {isScannerOpen && (\n                <ReceiptScanner\n                    onClose={() => setIsScannerOpen(false)}\n                    onConfirm={handleScanConfirm}\n                    activeVehicleKilometers={activeVehicle?.kilometers}\n                />\n            )}\n        </div>\n    );\n};\n\nexport default MaintenanceLog;
+                        </div>
+                    ))}
+                </div>
+             )}
+            </div>
+
+            {isScannerOpen && (
+                <ReceiptScanner
+                    onClose={() => setIsScannerOpen(false)}
+                    onConfirm={handleScanConfirm}
+                    activeVehicleKilometers={activeVehicle?.kilometers}
+                />
+            )}
+        </div>
+    );
+};
+
+export default MaintenanceLog;
