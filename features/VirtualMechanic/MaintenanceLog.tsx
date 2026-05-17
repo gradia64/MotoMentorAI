@@ -1,9 +1,10 @@
 import React, { useState, FormEvent, useMemo, useEffect } from 'react';
 import { MaintenanceRecord, MaintenanceType, MaintenanceReminder, GarageVehicle } from '../../types';
-import { PlusCircleIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, TrashIcon, ChevronDownIcon, CameraIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
+import ReceiptScanner from './ReceiptScanner';
 
 interface MaintenanceLogProps {
     log: MaintenanceRecord[];
@@ -23,6 +24,11 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
     const [cost, setCost] = useState('');
     const [kilometers, setKilometers] = useState('');
     const [isAddFormVisible, setIsAddFormVisible] = useState(false);
+    const [isScannerOpen, setIsScannerOpen] = useState(false);
+
+    const handleScanConfirm = (record: Omit<MaintenanceRecord, 'id'>) => {
+        onAdd(record);
+    };
 
     useEffect(() => {
         if (activeVehicle) {
@@ -126,7 +132,17 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
                     <h3 className="text-xl font-semibold text-blue-400 flex items-center gap-2">
                         <PlusCircleIcon className="w-6 h-6"/> Aggiungi Intervento di Manutenzione
                     </h3>
-                    <ChevronDownIcon className={`w-6 h-6 text-gray-400 transition-transform ${isAddFormVisible ? 'rotate-180' : ''}`} />
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setIsScannerOpen(true); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors"
+                            title="Scansiona scontrino con AI"
+                        >
+                            <CameraIcon className="w-4 h-4" />
+                            Scansiona Scontrino
+                        </button>
+                        <ChevronDownIcon className={`w-6 h-6 text-gray-400 transition-transform ${isAddFormVisible ? 'rotate-180' : ''}`} />
+                    </div>
                 </button>
                 {isAddFormVisible && (
                     <div className="p-4 border-t border-gray-700 animate-fade-in">
@@ -221,13 +237,4 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
                             <button onClick={() => onDeleteReminder(reminder.id)} className="text-gray-500 hover:text-red-400 transition-colors">
                                 <TrashIcon className="w-5 h-5" />
                             </button>
-                        </div>
-                    ))}
-                </div>
-             )}
-            </div>
-        </div>
-    );
-};
-
-export default MaintenanceLog;
+                        </div>\n                    ))}\n                </div>\n             )}\n            </div>\n\n            {isScannerOpen && (\n                <ReceiptScanner\n                    onClose={() => setIsScannerOpen(false)}\n                    onConfirm={handleScanConfirm}\n                    activeVehicleKilometers={activeVehicle?.kilometers}\n                />\n            )}\n        </div>\n    );\n};\n\nexport default MaintenanceLog;

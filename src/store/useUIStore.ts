@@ -19,6 +19,7 @@ interface UIState {
     isGeneratingDiagnosisPdf: boolean;
     isGeneratingChecklistPdf: boolean;
     isGeneratingDiarySummary: boolean;
+    isScanningReceipt: boolean;
     error: string | null;
     
     // Actions
@@ -41,6 +42,7 @@ export const useUIStore = create<UIState>((set) => ({
     isGeneratingDiagnosisPdf: false,
     isGeneratingChecklistPdf: false,
     isGeneratingDiarySummary: false,
+    isScanningReceipt: false,
     error: null,
 
     setMode: (mode) => set({ mode }),

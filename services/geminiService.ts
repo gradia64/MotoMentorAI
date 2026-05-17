@@ -200,6 +200,50 @@ export const getVehicleSpecs = async (model: string, year: string) => {
     };
 };
 
+export const scanReceiptImage = async (image: File): Promise<{
+    date: string;
+    description: string;
+    cost: number | null;
+    kilometers: number | null;
+    type: string;
+}> => {
+    const base64Data = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(image);
+    });
+
+    const prompt = `Sei un OCR specializzato per scontrini e ricevute di officine motociclistiche.
+Analizza questa immagine ed estrai le informazioni rilevanti.
+Restituisci SOLO un oggetto JSON con questi campi:
+- "date": data dell'intervento in formato YYYY-MM-DD (se non trovata, usa la data di oggi: ${new Date().toISOString().split('T')[0]})
+- "description": descrizione sintetica ma completa dei lavori eseguiti (max 200 caratteri)
+- "cost": importo totale come numero decimale (null se non leggibile)
+- "kilometers": chilometraggio indicato sullo scontrino come numero intero (null se non presente)
+- "type": uno tra "Ordinaria", "Straordinaria", "Eccezionale" in base alla complessità dell'intervento
+
+Regole:
+- Se vedi più lavori, riassumili nella descrizione separati da virgola
+- Per "type": Ordinaria = tagliandi, oli, filtri; Straordinaria = freni, pneumatici, catena; Eccezionale = motore, frizione, elettronica
+- Non aggiungere testo fuori dal JSON`;
+
+    const parts = [
+        { text: prompt },
+        { inlineData: { data: base64Data, mimeType: image.type } }
+    ];
+
+    const config = {
+        responseMimeType: "application/json",
+    };
+
+    const ai = getAi();
+    const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: { parts }, config });
+    const rawText = response.text || '';
+    const cleaned = cleanJsonString(rawText);
+    if (!cleaned) throw new Error("L'IA non ha restituito dati dallo scontrino.");
+    return JSON.parse(cleaned);
+};
+
 export const createChatSession = (vehicle: GarageVehicle | null, history: Content[] = []): Chat => {
     const apiKey = process.env.GEMINI_API_KEY;
     const ai = new GoogleGenAI({ apiKey });
