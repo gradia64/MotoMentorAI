@@ -20,6 +20,7 @@ interface UIState {
     isGeneratingChecklistPdf: boolean;
     isGeneratingDiarySummary: boolean;
     isScanningReceipt: boolean;
+    isGeneratingMaintenancePdf: boolean;
     error: string | null;
     
     // Actions
@@ -43,6 +44,7 @@ export const useUIStore = create<UIState>((set) => ({
     isGeneratingChecklistPdf: false,
     isGeneratingDiarySummary: false,
     isScanningReceipt: false,
+    isGeneratingMaintenancePdf: false,
     error: null,
 
     setMode: (mode) => set({ mode }),

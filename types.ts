@@ -127,6 +127,15 @@ export interface SavedChat {
     history: Content[];
 }
 
+export interface SharedTrip {
+    id: string;
+    ownerId: string;
+    ownerName: string;
+    tripTitle: string;
+    itinerary: Itinerary;
+    createdAt: string;
+}
+
 // --- SCHEMAS ---
 
 export const ITINERARY_SCHEMA = {

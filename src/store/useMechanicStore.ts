@@ -45,6 +45,7 @@ interface MechanicState {
     scanReceipt: (image: File) => Promise<any>;
     downloadDiagnosisPdf: () => void;
     downloadChecklistPdf: () => void;
+    downloadMaintenanceLogPdf: () => void;
 }
 
 export const useMechanicStore = create<MechanicState>((set, get) => ({
@@ -242,6 +243,62 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
                 });
             } finally {
                 useUIStore.getState().setLoading('isGeneratingChecklistPdf', false);
+            }
+        }, 100);
+    },
+
+    downloadMaintenanceLogPdf: () => {
+        const { maintenanceLog } = get();
+        const { activeVehicle } = useGarageStore.getState();
+        if (maintenanceLog.length === 0) {
+            useUIStore.getState().showNotification("Nessun intervento registrato da esportare.", "warning");
+            return;
+        }
+        
+        useUIStore.getState().setLoading('isGeneratingMaintenancePdf', true);
+        
+        setTimeout(() => {
+            try {
+                const vehicleName = activeVehicle ? activeVehicle.model : 'Veicolo non specificato';
+                const fileName = `Libretto_Manutenzione_${vehicleName.replace(/\s+/g, '_')}.pdf`;
+                
+                generatePdf(fileName, "Libretto di Manutenzione", ({ addWrappedText, addSeparator }) => {
+                    // Vehicle Info Section
+                    addWrappedText("DETTAGLI VEICOLO:", { size: 14, color: [37, 99, 235], marginBottom: 3 });
+                    addWrappedText(`Modello: ${vehicleName}`);
+                    if (activeVehicle) {
+                        addWrappedText(`Anno: ${activeVehicle.year || 'N/D'}`);
+                        addWrappedText(`Telaio/VIN: ${activeVehicle.vin || 'N/D'}`);
+                    }
+                    addSeparator({ marginTop: 5, marginBottom: 8 });
+
+                    // Log Section
+                    addWrappedText("LOG INTERVENTI:", { size: 14, color: [37, 99, 235], marginBottom: 5 });
+                    
+                    // Sort by date descending
+                    const sortedLog = [...maintenanceLog].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                    
+                    sortedLog.forEach((record, index) => {
+                        const dateStr = new Date(record.date).toLocaleDateString();
+                        addWrappedText(`${dateStr} - ${record.type.toUpperCase()}`, { size: 12, color: [31, 41, 55], marginBottom: 1 });
+                        addWrappedText(`Chilometri: ${record.kilometers || 'N/D'} km`);
+                        addWrappedText(`Costo: ${record.cost ? `${record.cost} €` : 'N/D'}`);
+                        addWrappedText(`Descrizione: ${record.description}`);
+                        
+                        if (index < sortedLog.length - 1) {
+                            addSeparator({ marginTop: 4, marginBottom: 4 });
+                        }
+                    });
+
+                    addSeparator({ marginTop: 10 });
+                    const today = new Date().toLocaleDateString();
+                    addWrappedText(`Report generato da MotoMentor il ${today}`, { size: 9, color: [107, 114, 128], marginBottom: 0 });
+                });
+            } catch (error) {
+                console.error("PDF generation error:", error);
+                useUIStore.getState().showNotification("Errore durante la generazione del PDF.", "error");
+            } finally {
+                useUIStore.getState().setLoading('isGeneratingMaintenancePdf', false);
             }
         }, 100);
     }

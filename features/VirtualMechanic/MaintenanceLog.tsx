@@ -1,6 +1,6 @@
 import React, { useState, FormEvent, useMemo, useEffect } from 'react';
 import { MaintenanceRecord, MaintenanceType, MaintenanceReminder, GarageVehicle } from '../../types';
-import { PlusCircleIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, TrashIcon, ChevronDownIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
@@ -15,9 +15,11 @@ interface MaintenanceLogProps {
     onAddReminder: (reminder: Omit<MaintenanceReminder, 'id'>) => void;
     onDeleteReminder: (id: string) => void;
     activeVehicle: GarageVehicle | null;
+    onDownloadPdf: () => void;
+    isDownloadingPdf: boolean;
 }
 
-const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, reminders, onAddReminder, onDeleteReminder, activeVehicle }) => {
+const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, reminders, onAddReminder, onDeleteReminder, activeVehicle, onDownloadPdf, isDownloadingPdf }) => {
     // State for Maintenance Log form
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [type, setType] = useState<MaintenanceType>(MaintenanceType.Ordinary);
@@ -187,7 +189,19 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
             {/* --- MAINTENANCE LOG DISPLAY --- */}
             <div>
                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-3">
-                    <h3 className="text-xl font-semibold text-blue-400">Storico Manutenzione</h3>
+                    <div className="flex items-center gap-4">
+                        <h3 className="text-xl font-semibold text-blue-400">Storico Manutenzione</h3>
+                        {log.length > 0 && (
+                            <button 
+                                onClick={onDownloadPdf}
+                                disabled={isDownloadingPdf}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-teal-600/20 text-teal-300 border border-teal-500/30 rounded-lg text-xs font-bold hover:bg-teal-600/30 transition-all disabled:opacity-50"
+                            >
+                                <ArrowDownTrayIcon className={`w-4 h-4 ${isDownloadingPdf ? 'animate-bounce' : ''}`} />
+                                {isDownloadingPdf ? 'Generazione...' : 'Esporta PDF'}
+                            </button>
+                        )}
+                    </div>
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-gray-400 text-sm font-medium">Ordina per:</span>
                         <SortButton label="Recenti" sortKey="date" direction="desc" />

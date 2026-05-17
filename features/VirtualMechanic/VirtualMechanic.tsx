@@ -38,7 +38,8 @@ const VirtualMechanic: React.FC = () => {
         addReminder,
         deleteReminder,
         downloadDiagnosisPdf,
-        downloadChecklistPdf
+        downloadChecklistPdf,
+        downloadMaintenanceLogPdf
     } = useMechanicStore();
 
     const { 
@@ -46,6 +47,7 @@ const VirtualMechanic: React.FC = () => {
         isGeneratingChecklist, 
         isGeneratingDiagnosisPdf, 
         isGeneratingChecklistPdf,
+        isGeneratingMaintenancePdf,
         notification
     } = useUIStore();
     
@@ -120,6 +122,8 @@ const VirtualMechanic: React.FC = () => {
                 onAddReminder={addReminder}
                 onDeleteReminder={deleteReminder}
                 activeVehicle={activeVehicle}
+                onDownloadPdf={downloadMaintenanceLogPdf}
+                isDownloadingPdf={isGeneratingMaintenancePdf}
             />
         ) : (
             <>

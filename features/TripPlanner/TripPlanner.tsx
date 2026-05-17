@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Day, GpxPoint } from '../../types';
-import { ArchiveBoxIcon, GlobeAltIcon, ArrowDownOnSquareIcon, BookOpenIcon, ClockIcon, BellAlertIcon, ShieldCheckIcon, BuildingStorefrontIcon, HomeIcon, ArrowDownTrayIcon, DocumentPlusIcon, MapIcon, QueueListIcon, ArrowsRightLeftIcon, ArrowPathIcon, PhotoIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { ArchiveBoxIcon, GlobeAltIcon, ArrowDownOnSquareIcon, BookOpenIcon, ClockIcon, BellAlertIcon, ShieldCheckIcon, BuildingStorefrontIcon, HomeIcon, ArrowDownTrayIcon, DocumentPlusIcon, MapIcon, QueueListIcon, ArrowsRightLeftIcon, ArrowPathIcon, PhotoIcon, XCircleIcon, ShareIcon, CheckIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
@@ -125,6 +125,7 @@ const TripPlanner: React.FC = () => {
         exportHistory,
         importHistory,
         downloadPdf,
+        shareTrip
     } = useTripStore();
 
     const { 
@@ -148,6 +149,8 @@ const TripPlanner: React.FC = () => {
     } = draft;
 
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+    const [isSharing, setIsSharing] = useState(false);
+    const [recentShareId, setRecentShareId] = useState<string | null>(null);
 
     // Sync image previews with draft state
     React.useEffect(() => {
@@ -276,6 +279,15 @@ const TripPlanner: React.FC = () => {
     const handleTripSubmitLocal = (e: React.FormEvent) => {
         e.preventDefault();
         generateTrip();
+    };
+
+    const handleShare = async () => {
+        setIsSharing(true);
+        const id = await shareTrip();
+        if (id) {
+            setRecentShareId(id);
+        }
+        setIsSharing(false);
     };
 
     return (
@@ -434,6 +446,28 @@ const TripPlanner: React.FC = () => {
             
             {itinerary && !isGeneratingItinerary && (
                 <div className="mt-6 animate-fade-in">
+                    {recentShareId && (
+                        <div className="mb-6 bg-green-500/10 border border-green-500/30 p-4 rounded-2xl animate-bounce-subtle flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-green-500 p-2 rounded-full">
+                                    <CheckIcon className="w-5 h-5 text-white" />
+                                </div>
+                                <div>
+                                    <p className="text-green-400 font-bold">Viaggio Condiviso!</p>
+                                    <p className="text-green-500/70 text-xs">Il link pubblico è stato copiato negli appunti.</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center bg-gray-900/50 p-2 rounded-xl border border-white/5 w-full sm:w-auto">
+                                <code className="text-xs text-blue-300 truncate max-w-[200px]">{window.location.origin}/shared/{recentShareId}</code>
+                                <button 
+                                    onClick={() => setRecentShareId(null)}
+                                    className="ml-2 text-white hover:text-green-400 transition-colors"
+                                >
+                                    Chiudi
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     <div id="itinerary-content">
                         <div className="flex justify-between items-start mb-4 flex-wrap gap-2">
                             <div className="flex-1">
@@ -442,6 +476,11 @@ const TripPlanner: React.FC = () => {
                             </div>
                             <div className="flex gap-2 items-center flex-wrap self-start">
                                 {notification?.message?.toLowerCase().includes('salvato') && <span className="text-green-400 text-sm animate-pulse mr-2">{notification.message}</span>}
+                                <Tooltip text="Condividi questo itinerario con altri tramite un link pubblico">
+                                    <ActionButton onClick={handleShare} loading={isSharing} className="bg-purple-600 hover:bg-purple-500">
+                                        <ShareIcon className="w-5 h-5"/> Condividi
+                                    </ActionButton>
+                                </Tooltip>
                                 <Tooltip text="Salva le modifiche all'itinerario corrente o aggiungilo allo storico">
                                     <ActionButton onClick={saveItinerary}><ArchiveBoxIcon className="w-5 h-5"/> Salva</ActionButton>
                                 </Tooltip>

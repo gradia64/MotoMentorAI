@@ -24,6 +24,7 @@ const Garage = lazy(() => import('./features/Garage/Garage'));
 const AiChat = lazy(() => import('./features/AiChat/AiChat'));
 const TripDiary = lazy(() => import('./features/TripDiary/TripDiary'));
 const Dashboard = lazy(() => import('./features/Dashboard/Dashboard'));
+const SharedTripView = lazy(() => import('./features/TripPlanner/SharedTripView'));
 
 // Declare jspdf from window for global access
 declare global {
@@ -49,6 +50,7 @@ const AppContent: React.FC = () => {
     const { initChats } = useChatStore();
     
     const [fatalError, setFatalError] = React.useState<string | null>(null);
+    const [sharedTripId, setSharedTripId] = React.useState<string | null>(null);
 
     useEffect(() => {
         const handleError = (event: ErrorEvent) => {
@@ -60,6 +62,13 @@ const AppContent: React.FC = () => {
 
         window.addEventListener('error', handleError);
         window.addEventListener('unhandledrejection', handleRejection);
+
+        // Routing logic for shared trips
+        const path = window.location.pathname;
+        if (path.startsWith('/shared/')) {
+            const id = path.split('/shared/')[1];
+            if (id) setSharedTripId(id);
+        }
 
         checkAuth();
 
@@ -105,6 +114,19 @@ const AppContent: React.FC = () => {
                         Ignora e prosegui (Sperimentale)
                     </button>
                 </div>
+            </div>
+        );
+    }
+
+    if (sharedTripId) {
+        return (
+            <div className="bg-slate-900 min-h-screen text-white">
+                <Suspense fallback={<SectionLoader />}>
+                    <SharedTripView id={sharedTripId} onBack={() => {
+                        setSharedTripId(null);
+                        window.history.pushState({}, '', '/');
+                    }} />
+                </Suspense>
             </div>
         );
     }

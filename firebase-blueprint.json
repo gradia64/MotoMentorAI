@@ -88,6 +88,20 @@
         "data": { "type": "object", "description": "The chat history and metadata" }
       },
       "required": ["id", "userId", "data"]
+    },
+    "SharedTrip": {
+      "title": "SharedTrip",
+      "description": "A publicly shared trip itinerary",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "tripTitle": { "type": "string" },
+        "itinerary": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerId", "tripTitle", "itinerary", "createdAt"]
     }
   },
   "firestore": {
@@ -97,6 +111,7 @@
     "/users/{userId}/diagnoses/{diagnosisId}": { "schema": "Diagnosis", "description": "User's saved diagnoses" },
     "/users/{userId}/maintenance/{recordId}": { "schema": "MaintenanceRecord", "description": "User's maintenance log" },
     "/users/{userId}/reminders/{reminderId}": { "schema": "MaintenanceReminder", "description": "User's reminders" },
-    "/users/{userId}/chats/{chatId}": { "schema": "SavedChat", "description": "User's saved chats" }
+    "/users/{userId}/chats/{chatId}": { "schema": "SavedChat", "description": "User's saved chats" },
+    "/sharedTrips/{sharedTripId}": { "schema": "SharedTrip", "description": "Publicly shared trips" }
   }
 }

@@ -7,9 +7,10 @@ import {
     doc, 
     setDoc, 
     deleteDoc,
-    query
+    query,
+    getDoc
 } from 'firebase/firestore';
-import { Itinerary, SavedTrip } from '../../types';
+import { Itinerary, SavedTrip, SharedTrip } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useGarageStore } from './useGarageStore';
 import { generateItinerary, generateTripDiarySummary } from '../../services/geminiService';
@@ -22,6 +23,7 @@ interface TripState {
     itinerary: Itinerary | null;
     activeTripId: string | null;
     activeDiaryTripId: string | null;
+    sharedTrip: SharedTrip | null;
     draft: {
         tripType: 'itinerary' | 'tour';
         selectedTour: string;
@@ -51,6 +53,8 @@ interface TripState {
     updateDiarySummary: (trip: SavedTrip) => Promise<void>;
     downloadPdf: () => void;
     downloadDiaryPdf: (trip: SavedTrip) => void;
+    shareTrip: () => Promise<string | null>;
+    getSharedTrip: (id: string) => Promise<SharedTrip | null>;
 }
 
 const initialDraft: TripState['draft'] = {
@@ -72,6 +76,7 @@ export const useTripStore = create<TripState>((set, get) => ({
     itinerary: null,
     activeTripId: null,
     activeDiaryTripId: null,
+    sharedTrip: null,
     draft: initialDraft,
 
     initTrips: (userId) => {
@@ -261,5 +266,49 @@ export const useTripStore = create<TripState>((set, get) => ({
                 useUIStore.getState().setLoading('isGeneratingPdf', false);
             }
         }, 100);
+    },
+
+    shareTrip: async () => {
+        const { itinerary } = get();
+        const { showNotification } = useUIStore.getState();
+        const userId = auth.currentUser?.uid;
+        if (!itinerary || !userId) return null;
+
+        const sharedId = crypto.randomUUID();
+        const sharedTrip: SharedTrip = {
+            id: sharedId,
+            ownerId: userId,
+            ownerName: auth.currentUser?.displayName || 'Utente MotoMentor',
+            tripTitle: itinerary.tripTitle,
+            itinerary: itinerary,
+            createdAt: new Date().toISOString()
+        };
+
+        try {
+            await setDoc(doc(db, 'sharedTrips', sharedId), sharedTrip);
+            const shareUrl = `${window.location.origin}/shared/${sharedId}`;
+            await navigator.clipboard.writeText(shareUrl);
+            showNotification("Link di condivisione copiato negli appunti!");
+            return sharedId;
+        } catch (e: any) {
+            handleFirestoreError(e, OperationType.WRITE, `sharedTrips/${sharedId}`);
+            return null;
+        }
+    },
+
+    getSharedTrip: async (id) => {
+        try {
+            const docRef = doc(db, 'sharedTrips', id);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data() as SharedTrip;
+                set({ sharedTrip: data });
+                return data;
+            }
+            return null;
+        } catch (e) {
+            console.error("Error fetching shared trip:", e);
+            return null;
+        }
     }
 }));
