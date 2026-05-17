@@ -1,6 +1,6 @@
 
 import React, { Suspense, lazy, useEffect } from 'react';
-import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, ClockIcon, BookOpenIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
+import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, BookOpenIcon, ArrowRightOnRectangleIcon, HomeIcon } from '@heroicons/react/24/outline';
 
 import { AiMode } from './types';
 import TabButton from './components/TabButton';
@@ -203,7 +203,7 @@ const AppContent: React.FC = () => {
 
                 <div className="bg-gray-800/80 rounded-2xl shadow-2xl overflow-hidden border border-gray-700/50 min-h-[60vh]">
                     <div className="hidden md:flex bg-gray-900/50 border-b border-gray-700 px-2">
-                        <TabButton text="Home" icon={<CogIcon className="w-5 h-5"/>} active={mode === AiMode.Dashboard} onClick={() => setMode(AiMode.Dashboard)} />
+                        <TabButton text="Home" icon={<HomeIcon className="w-5 h-5"/>} active={mode === AiMode.Dashboard} onClick={() => setMode(AiMode.Dashboard)} />
                         <TabButton text="Planner" icon={<MapPinIcon className="w-5 h-5"/>} active={mode === AiMode.TripPlanner} onClick={() => setMode(AiMode.TripPlanner)} />
                         <TabButton text="Diario" icon={<BookOpenIcon className="w-5 h-5"/>} active={mode === AiMode.TripDiary} onClick={() => setMode(AiMode.TripDiary)} />
                         <TabButton text="Meccanico" icon={<WrenchScrewdriverIcon className="w-5 h-5"/>} active={mode === AiMode.VirtualMechanic} onClick={() => setMode(AiMode.VirtualMechanic)} />
@@ -235,7 +235,7 @@ const AppContent: React.FC = () => {
             </main>
 
             <nav className="md:hidden fixed bottom-6 left-6 right-6 z-50 bg-gray-800/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl px-2 py-2 flex items-center justify-around">
-                <NavIcon active={mode === AiMode.Dashboard} onClick={() => setMode(AiMode.Dashboard)} icon={<CogIcon className="w-6 h-6" />} label="Home" />
+                <NavIcon active={mode === AiMode.Dashboard} onClick={() => setMode(AiMode.Dashboard)} icon={<HomeIcon className="w-6 h-6" />} label="Home" />
                 <NavIcon active={mode === AiMode.TripPlanner} onClick={() => setMode(AiMode.TripPlanner)} icon={<MapPinIcon className="w-6 h-6" />} label="Viaggi" />
                 <NavIcon active={mode === AiMode.VirtualMechanic} onClick={() => setMode(AiMode.VirtualMechanic)} icon={<WrenchScrewdriverIcon className="w-6 h-6" />} label="Mecc" />
                 <NavIcon active={mode === AiMode.Garage} onClick={() => setMode(AiMode.Garage)} icon={<CogIcon className="w-6 h-6" />} label="Garage" />

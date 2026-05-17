@@ -1,10 +1,11 @@
 import React, { useState, FormEvent, useMemo, useEffect } from 'react';
 import { MaintenanceRecord, MaintenanceType, MaintenanceReminder, GarageVehicle } from '../../types';
-import { PlusCircleIcon, TrashIcon, ChevronDownIcon, CameraIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
 import ReceiptScanner from './ReceiptScanner';
+import { ScannedReceiptData } from '../../types';
 
 interface MaintenanceLogProps {
     log: MaintenanceRecord[];
@@ -26,8 +27,14 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
     const [isAddFormVisible, setIsAddFormVisible] = useState(false);
     const [isScannerOpen, setIsScannerOpen] = useState(false);
 
-    const handleScanConfirm = (record: Omit<MaintenanceRecord, 'id'>) => {
-        onAdd(record);
+    const handleReceiptSuccess = (data: ScannedReceiptData) => {
+        onAdd({
+            date: data.date,
+            type: data.type,
+            description: data.description,
+            cost: data.cost,
+            kilometers: data.kilometers
+        });
     };
 
     useEffect(() => {
@@ -132,20 +139,26 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
                     <h3 className="text-xl font-semibold text-blue-400 flex items-center gap-2">
                         <PlusCircleIcon className="w-6 h-6"/> Aggiungi Intervento di Manutenzione
                     </h3>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={(e) => { e.stopPropagation(); setIsScannerOpen(true); }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors"
-                            title="Scansiona scontrino con AI"
-                        >
-                            <CameraIcon className="w-4 h-4" />
-                            Scansiona Scontrino
-                        </button>
-                        <ChevronDownIcon className={`w-6 h-6 text-gray-400 transition-transform ${isAddFormVisible ? 'rotate-180' : ''}`} />
-                    </div>
+                    < ChevronDownIcon className={`w-6 h-6 text-gray-400 transition-transform ${isAddFormVisible ? 'rotate-180' : ''}`} />
                 </button>
                 {isAddFormVisible && (
                     <div className="p-4 border-t border-gray-700 animate-fade-in">
+                        <div className="mb-6 pb-6 border-b border-gray-600/50">
+                            <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl flex items-center justify-between gap-4">
+                                <div>
+                                    <h4 className="text-blue-200 font-bold mb-1">Inserimento Rapido con IA</h4>
+                                    <p className="text-blue-300/70 text-sm">Hai uno scontrino? Scansionalo e MotoMentor compilerà i dati per te.</p>
+                                </div>
+                                <button 
+                                    onClick={() => setIsScannerOpen(true)}
+                                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shadow-lg shadow-blue-600/20"
+                                >
+                                    <PlusCircleIcon className="w-5 h-5" />
+                                    Scansiona Scontrino
+                                </button>
+                            </div>
+                        </div>
+
                         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <InputField id="logDate" label="Data" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
                             <SelectField id="logType" label="Tipo Intervento" value={type} onChange={(e) => setType(e.target.value as MaintenanceType)}>
@@ -164,6 +177,12 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
                     </div>
                 )}
             </div>
+
+            <ReceiptScanner 
+                isOpen={isScannerOpen} 
+                onClose={() => setIsScannerOpen(false)} 
+                onSuccess={handleReceiptSuccess} 
+            />
 
             {/* --- MAINTENANCE LOG DISPLAY --- */}
             <div>
@@ -242,14 +261,6 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
                 </div>
              )}
             </div>
-
-            {isScannerOpen && (
-                <ReceiptScanner
-                    onClose={() => setIsScannerOpen(false)}
-                    onConfirm={handleScanConfirm}
-                    activeVehicleKilometers={activeVehicle?.kilometers}
-                />
-            )}
         </div>
     );
 };

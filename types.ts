@@ -219,3 +219,23 @@ export const VEHICLE_SPECS_SCHEMA = {
     },
     required: ["cilindrata", "potenza", "pneumatico_anteriore", "pneumatico_posteriore"]
 };
+
+export interface ScannedReceiptData {
+    date: string;
+    description: string;
+    cost: number;
+    kilometers: number;
+    type: MaintenanceType;
+}
+
+export const RECEIPT_SCAN_SCHEMA = {
+    type: Type.OBJECT,
+    properties: {
+        data: { type: Type.STRING, description: "La data dell'intervento in formato ISO (YYYY-MM-DD)." },
+        descrizione: { type: Type.STRING, description: "Una breve descrizione dei lavori effettuati." },
+        costo: { type: Type.NUMBER, description: "L'importo totale pagato." },
+        chilometri: { type: Type.NUMBER, description: "I chilometri indicati sullo scontrino/ricevuta (se presenti, altrimenti 0)." },
+        tipo: { type: Type.STRING, enum: [MaintenanceType.Ordinary, MaintenanceType.Extraordinary, MaintenanceType.Exceptional], description: "Il tipo di manutenzione." }
+    },
+    required: ["data", "descrizione", "costo", "chilometri", "tipo"]
+};

@@ -42,9 +42,9 @@ interface MechanicState {
     deleteMaintenanceRecord: (id: string) => Promise<void>;
     addReminder: (r: Omit<MaintenanceReminder, 'id'>) => Promise<void>;
     deleteReminder: (id: string) => Promise<void>;
+    scanReceipt: (image: File) => Promise<any>;
     downloadDiagnosisPdf: () => void;
     downloadChecklistPdf: () => void;
-    scanReceipt: (image: File) => Promise<Partial<Omit<MaintenanceRecord, 'id'>> | null>;
 }
 
 export const useMechanicStore = create<MechanicState>((set, get) => ({
@@ -195,6 +195,20 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
         }
     },
 
+    scanReceipt: async (image) => {
+        const { setLoading, showNotification } = useUIStore.getState();
+        setLoading('isScanningReceipt', true);
+        try {
+            const data = await scanReceiptImage(image);
+            return data;
+        } catch (err: any) {
+            showNotification("Errore durante la scansione dello scontrino.", "error");
+            return null;
+        } finally {
+            setLoading('isScanningReceipt', false);
+        }
+    },
+
     downloadDiagnosisPdf: () => {
         const { diagnosis } = get();
         const { activeVehicle } = useGarageStore.getState();
@@ -230,31 +244,5 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
                 useUIStore.getState().setLoading('isGeneratingChecklistPdf', false);
             }
         }, 100);
-    },
-
-    scanReceipt: async (image: File) => {
-        const { showNotification, setLoading } = useUIStore.getState();
-        setLoading('isScanningReceipt', true);
-        try {
-            const result = await scanReceiptImage(image);
-            const typeMap: Record<string, MaintenanceType> = {
-                'Ordinaria': MaintenanceType.Ordinary,
-                'Straordinaria': MaintenanceType.Extraordinary,
-                'Eccezionale': MaintenanceType.Exceptional,
-            };
-            return {
-                date: result.date,
-                description: result.description,
-                cost: result.cost ?? undefined,
-                kilometers: result.kilometers ?? undefined,
-                type: typeMap[result.type] ?? MaintenanceType.Ordinary,
-            };
-        } catch (e: any) {
-            showNotification(`Errore scansione: ${e.message}`, 'error');
-            return null;
-        } finally {
-            setLoading('isScanningReceipt', false);
-        }
-    },
-
+    }
 }));
