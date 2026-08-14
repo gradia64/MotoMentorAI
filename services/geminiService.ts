@@ -212,7 +212,11 @@ export const getVehicleSpecs = async (model: string, year: string) => {
 };
 
 export const createChatSession = (vehicle: GarageVehicle | null, history: Content[] = []): Chat => {
-    const ai = getAi();
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        throw new Error("GEMINI_API_KEY non configurata. Assicurati che sia presente nelle impostazioni di Vercel.");
+    }
+    const ai = new GoogleGenAI({ apiKey });
     const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
 
     return ai.chats.create({
@@ -220,6 +224,16 @@ export const createChatSession = (vehicle: GarageVehicle | null, history: Conten
         config: { systemInstruction },
         history: history
     });
+};
+
+export const sendDirectChatMessage = async (
+    vehicle: GarageVehicle | null,
+    history: Content[],
+    newMessage: string
+): Promise<string> => {
+    const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
+    const contents: any[] = [...history, { role: 'user', parts: [{ text: newMessage }] }];
+    return await textApiProxy('gemini-3.7-flash', contents, { systemInstruction });
 };
 
 export const scanReceiptImage = async (image: File): Promise<ScannedReceiptData> => {
