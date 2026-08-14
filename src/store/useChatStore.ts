@@ -12,7 +12,7 @@ import { Chat, Content, GenerateContentResponse } from '@google/genai';
 import { SavedChat } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useGarageStore } from './useGarageStore';
-import { createChatSession, sendDirectChatMessage } from '../../services/geminiService';
+import { createChatSession, sendDirectChatMessage, formatGeminiError, PRIMARY_MODEL, FALLBACK_MODEL } from '../../services/geminiService';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrors';
 
 interface ChatState {
@@ -97,17 +97,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     console.error("Direct fallback failed:", directErr);
                 }
 
-                const isTransient = err.message?.includes("429") || err.message?.includes("RESOURCE_EXHAUSTED") || err.message?.includes("fetch");
+                const isTransient = 
+                    err.message?.includes("503") || 
+                    err.message?.includes("high demand") || 
+                    err.message?.includes("UNAVAILABLE") || 
+                    err.message?.includes("429") || 
+                    err.message?.includes("RESOURCE_EXHAUSTED");
                 if (isTransient && attempt < 3) {
-                    await new Promise(resolve => setTimeout(resolve, attempt * 1500));
+                    await new Promise(resolve => setTimeout(resolve, attempt * 1000));
                     session = null;
                     return await trySendMessage(attempt + 1);
                 }
                 
-                const errorMsg = err.message?.includes("safety") 
-                    ? "Bloccato dai filtri di sicurezza." 
-                    : (err.message || "Errore connessione chat.");
-                showNotification(errorMsg, "error");
+                showNotification(formatGeminiError(err), "error");
                 set({ chatHistory: historyBeforeMessage, chatSession: null });
                 return false;
             }

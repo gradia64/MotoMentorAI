@@ -1,6 +1,9 @@
 import { GoogleGenAI, Chat, Content } from "@google/genai";
 import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, VEHICLE_SPECS_SCHEMA, DiaryEntry, RECEIPT_SCAN_SCHEMA, ScannedReceiptData } from '../types';
 
+export const PRIMARY_MODEL = 'gemini-3.7-flash';
+export const FALLBACK_MODEL = 'gemini-3.5-flash';
+
 const getApiKey = (): string => {
     let key = '';
     try {
@@ -103,10 +106,10 @@ const apiProxy = async (model: string, contents: any, config?: any) => {
     } catch (e: any) {
         console.error(`Gemini API Error (${model}):`, e);
 
-        // Fallback su gemini-2.0-flash per 503 / 429
-        if ((e.message?.includes("503") || e.message?.includes("high demand") || e.message?.includes("UNAVAILABLE") || e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model !== 'gemini-2.0-flash') {
-            console.warn(`Fallback da ${model} a gemini-2.0-flash...`);
-            return await apiProxy('gemini-2.0-flash', contents, config);
+        // Fallback automatico su FALLBACK_MODEL in caso di 503, 429, 404, not found o overload
+        if (model === PRIMARY_MODEL) {
+            console.warn(`Fallback da ${PRIMARY_MODEL} a ${FALLBACK_MODEL}...`);
+            return await apiProxy(FALLBACK_MODEL, contents, config);
         }
 
         if (e.message?.includes("Requested entity was not found")) {
@@ -124,9 +127,9 @@ const textApiProxy = async (model: string, contents: any, config?: any) => {
          return response.text || "Nessuna risposta generata.";
     } catch (e: any) {
          console.error(`Gemini Text API Error (${model}):`, e);
-         if ((e.message?.includes("503") || e.message?.includes("high demand") || e.message?.includes("UNAVAILABLE") || e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model !== 'gemini-2.0-flash') {
-            console.warn(`Fallback testo da ${model} a gemini-2.0-flash...`);
-            return await textApiProxy('gemini-2.0-flash', contents, config);
+         if (model === PRIMARY_MODEL) {
+            console.warn(`Fallback testo da ${PRIMARY_MODEL} a ${FALLBACK_MODEL}...`);
+            return await textApiProxy(FALLBACK_MODEL, contents, config);
          }
          throw e;
     }
@@ -203,7 +206,7 @@ REGOLE JSON: Restituisci esclusivamente l'oggetto JSON richiesto secondo ITINERA
         }
     }
 
-    const response = await apiProxy('gemini-2.5-flash', { parts }, config);
+    const response = await apiProxy(PRIMARY_MODEL, { parts }, config);
     return mapApiItineraryToAppItinerary(response);
 };
 
@@ -221,13 +224,13 @@ Esegui un'analisi tecnica dettagliata.`;
         });
         parts.push({ inlineData: { data: base64Data, mimeType: image.type } });
     }
-    return await textApiProxy('gemini-2.5-flash', { parts });
+    return await textApiProxy(PRIMARY_MODEL, { parts });
 };
 
 export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: GarageVehicle): Promise<MaintenanceTips> => {
     const prompt = `Checklist pre-viaggio per ${motorcycle.model} destinazione ${itinerary.tripTitle}.`;
     const config = { responseMimeType: "application/json", responseSchema: MAINTENANCE_TIPS_SCHEMA };
-    const response = await apiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy(PRIMARY_MODEL, { parts: [{ text: prompt }] }, config);
     return {
         essentialChecks: response.controlli_essenziali || [],
         tripSpecificTips: response.suggerimenti_specifici_viaggio || [],
@@ -238,13 +241,13 @@ export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: Garag
 export const generateTripDiarySummary = async (itinerary: Itinerary, entries: DiaryEntry[]): Promise<string> => {
     const diaryContent = entries.map(e => `Giorno ${e.day}: "${e.content}"`).join('\n');
     const prompt = `Scrivi il racconto epico del viaggio "${itinerary.tripTitle}" basandoti su queste note: ${diaryContent}.`;
-    return await textApiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] });
+    return await textApiProxy(PRIMARY_MODEL, { parts: [{ text: prompt }] });
 };
 
 export const getVehicleSpecs = async (model: string, year: string) => {
     const prompt = `Restituisci i dati tecnici ufficiali per la moto ${model} (${year}). Assicurati di restituire un JSON valido e che tutti i valori numerici includano l'unità di misura e siano racchiusi tra virgolette come stringhe (es. "776 cc", "84 CV").`;
     const config = { responseMimeType: "application/json", responseSchema: VEHICLE_SPECS_SCHEMA };
-    const response = await apiProxy('gemini-2.5-flash', { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy(PRIMARY_MODEL, { parts: [{ text: prompt }] }, config);
     return {
         displacement: response.cilindrata || '',
         power: response.potenza || '',
@@ -262,7 +265,7 @@ export const createChatSession = (vehicle: GarageVehicle | null, history: Conten
     const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
 
     return ai.chats.create({
-        model: 'gemini-2.5-flash',
+        model: PRIMARY_MODEL,
         config: { systemInstruction },
         history: history
     });
@@ -275,7 +278,7 @@ export const sendDirectChatMessage = async (
 ): Promise<string> => {
     const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
     const contents: any[] = [...history, { role: 'user', parts: [{ text: newMessage }] }];
-    return await textApiProxy('gemini-2.5-flash', contents, { systemInstruction });
+    return await textApiProxy(PRIMARY_MODEL, contents, { systemInstruction });
 };
 
 export const scanReceiptImage = async (image: File): Promise<ScannedReceiptData> => {
@@ -288,7 +291,7 @@ export const scanReceiptImage = async (image: File): Promise<ScannedReceiptData>
         reader.readAsDataURL(image);
     });
 
-    const response = await apiProxy('gemini-2.5-flash', { 
+    const response = await apiProxy(PRIMARY_MODEL, { 
         parts: [
             { text: prompt },
             { inlineData: { data: base64Data, mimeType: image.type } }
