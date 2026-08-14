@@ -2,8 +2,19 @@
 import { GoogleGenAI, Chat, Content } from "@google/genai";
 import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, VEHICLE_SPECS_SCHEMA, DiaryEntry, RECEIPT_SCAN_SCHEMA, ScannedReceiptData } from '../types';
 
+const getApiKey = (): string => {
+    return (
+        process.env.GEMINI_API_KEY ||
+        process.env.API_KEY ||
+        (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+        (import.meta as any).env?.VITE_API_KEY ||
+        (typeof window !== 'undefined' && ((window as any).GEMINI_API_KEY || (window as any).API_KEY)) ||
+        ''
+    );
+};
+
 const getAi = () => {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = getApiKey();
     if (!apiKey) throw new Error("GEMINI_API_KEY non configurata nel sistema.");
     return new GoogleGenAI({ apiKey });
 };
@@ -201,8 +212,7 @@ export const getVehicleSpecs = async (model: string, year: string) => {
 };
 
 export const createChatSession = (vehicle: GarageVehicle | null, history: Content[] = []): Chat => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = getAi();
     const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
 
     return ai.chats.create({
