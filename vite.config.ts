@@ -6,11 +6,17 @@ export default defineConfig(({ mode }) => {
   // Carica le variabili dai file .env locali
   const env = loadEnv(mode, '.', '');
   
-  // FIX: Su Vercel (Produzione), le variabili d'ambiente sono in process.env.
-  // loadEnv non le legge automaticamente se non sono in un file fisico.
-  // Usiamo un fallback per garantire che la chiave venga letta correttamente sia in locale che in cloud.
-  // UPDATE: Aggiunto supporto esplicito per GEMINI_API_KEY come nome alternativo.
-  const apiKey = env.API_KEY || process.env.API_KEY || env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  // Risoluzione esaustiva della chiave API sia in locale che durante il build su Vercel:
+  const apiKey =
+    process.env.VITE_GEMINI_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.API_KEY ||
+    process.env.VITE_API_KEY ||
+    env.VITE_GEMINI_API_KEY ||
+    env.GEMINI_API_KEY ||
+    env.API_KEY ||
+    env.VITE_API_KEY ||
+    '';
 
   return {
     plugins: [react()],
@@ -18,6 +24,10 @@ export default defineConfig(({ mode }) => {
       'process.env.NODE_ENV': JSON.stringify(mode),
       'process.env.API_KEY': JSON.stringify(apiKey),
       'process.env.GEMINI_API_KEY': JSON.stringify(apiKey),
+      'process.env.VITE_GEMINI_API_KEY': JSON.stringify(apiKey),
+      'process.env.VITE_API_KEY': JSON.stringify(apiKey),
+      'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(apiKey),
+      'import.meta.env.VITE_API_KEY': JSON.stringify(apiKey),
       'global': 'window',
     },
     build: {

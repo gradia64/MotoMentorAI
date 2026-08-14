@@ -2,9 +2,35 @@
 import { GoogleGenAI, Chat, Content } from "@google/genai";
 import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, VEHICLE_SPECS_SCHEMA, DiaryEntry, RECEIPT_SCAN_SCHEMA, ScannedReceiptData } from '../types';
 
+const getApiKey = (): string => {
+    let key = '';
+    try {
+        if (typeof process !== 'undefined' && process.env) {
+            key = process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.VITE_API_KEY || '';
+        }
+    } catch (e) {}
+
+    if (!key) {
+        try {
+            const metaEnv = (import.meta as any).env;
+            if (metaEnv) {
+                key = metaEnv.VITE_GEMINI_API_KEY || metaEnv.VITE_API_KEY || metaEnv.GEMINI_API_KEY || metaEnv.API_KEY || '';
+            }
+        } catch (e) {}
+    }
+
+    if (!key && typeof window !== 'undefined') {
+        key = (window as any).GEMINI_API_KEY || (window as any).API_KEY || (window as any).VITE_GEMINI_API_KEY || '';
+    }
+
+    return key;
+};
+
 const getAi = () => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY non configurata nel sistema.");
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        throw new Error("GEMINI_API_KEY non trovata. Inserisci GEMINI_API_KEY o VITE_GEMINI_API_KEY nelle Environment Variables di Vercel e fai Redeploy.");
+    }
     return new GoogleGenAI({ apiKey });
 };
 
@@ -48,8 +74,8 @@ const apiProxy = async (model: string, contents: any, config: any) => {
 
         // Se l'errore è 429 (Quota esaurita) e stiamo usando il Pro, tentiamo il fallback sul Flash
         if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3.1-pro-preview') {
-            console.warn("Quota Pro esaurita, tentativo di fallback su Gemini 3.1 Flash...");
-            return await apiProxy('gemini-3-flash-preview', contents, config);
+            console.warn("Quota Pro esaurita, tentativo di fallback su Gemini 3.7 Flash...");
+            return await apiProxy('gemini-3.7-flash', contents, config);
         }
 
         if (e.message?.includes("Requested entity was not found")) {
@@ -72,7 +98,7 @@ const textApiProxy = async (model: string, contents: any, config?: any) => {
     } catch (e: any) {
          console.error(`Gemini Text API Error (${model}):`, e);
          if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3.1-pro-preview') {
-            return await textApiProxy('gemini-3-flash-preview', contents, config);
+            return await textApiProxy('gemini-3.7-flash', contents, config);
          }
          throw e;
     }
@@ -174,7 +200,7 @@ Esegui un'analisi tecnica dettagliata.`;
 export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: GarageVehicle): Promise<MaintenanceTips> => {
     const prompt = `Checklist pre-viaggio per ${motorcycle.model} destinazione ${itinerary.tripTitle}.`;
     const config = { responseMimeType: "application/json", responseSchema: MAINTENANCE_TIPS_SCHEMA };
-    const response = await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy('gemini-3.7-flash', { parts: [{ text: prompt }] }, config);
     return {
         essentialChecks: response.controlli_essenziali || [],
         tripSpecificTips: response.suggerimenti_specifici_viaggio || [],
@@ -185,13 +211,13 @@ export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: Garag
 export const generateTripDiarySummary = async (itinerary: Itinerary, entries: DiaryEntry[]): Promise<string> => {
     const diaryContent = entries.map(e => `Giorno ${e.day}: "${e.content}"`).join('\n');
     const prompt = `Scrivi il racconto epico del viaggio "${itinerary.tripTitle}" basandoti su queste note: ${diaryContent}.`;
-    return await textApiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] });
+    return await textApiProxy('gemini-3.7-flash', { parts: [{ text: prompt }] });
 };
 
 export const getVehicleSpecs = async (model: string, year: string) => {
     const prompt = `Restituisci i dati tecnici ufficiali per la moto ${model} (${year}). Assicurati di restituire un JSON valido e che tutti i valori numerici includano l'unità di misura e siano racchiusi tra virgolette come stringhe (es. "776 cc", "84 CV").`;
     const config = { responseMimeType: "application/json", responseSchema: VEHICLE_SPECS_SCHEMA };
-    const response = await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy('gemini-3.7-flash', { parts: [{ text: prompt }] }, config);
     return {
         displacement: response.cilindrata || '',
         power: response.potenza || '',
@@ -201,15 +227,28 @@ export const getVehicleSpecs = async (model: string, year: string) => {
 };
 
 export const createChatSession = (vehicle: GarageVehicle | null, history: Content[] = []): Chat => {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        throw new Error("GEMINI_API_KEY non configurata. Assicurati che sia presente nelle impostazioni di Vercel.");
+    }
     const ai = new GoogleGenAI({ apiKey });
     const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
 
     return ai.chats.create({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3.7-flash',
         config: { systemInstruction },
         history: history
     });
+};
+
+export const sendDirectChatMessage = async (
+    vehicle: GarageVehicle | null,
+    history: Content[],
+    newMessage: string
+): Promise<string> => {
+    const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
+    const contents: any[] = [...history, { role: 'user', parts: [{ text: newMessage }] }];
+    return await textApiProxy('gemini-3.7-flash', contents, { systemInstruction });
 };
 
 export const scanReceiptImage = async (image: File): Promise<ScannedReceiptData> => {
@@ -222,7 +261,7 @@ export const scanReceiptImage = async (image: File): Promise<ScannedReceiptData>
         reader.readAsDataURL(image);
     });
 
-    const response = await apiProxy('gemini-3-flash-preview', { 
+    const response = await apiProxy('gemini-3.7-flash', { 
         parts: [
             { text: prompt },
             { inlineData: { data: base64Data, mimeType: image.type } }
