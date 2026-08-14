@@ -48,8 +48,8 @@ const apiProxy = async (model: string, contents: any, config: any) => {
 
         // Se l'errore è 429 (Quota esaurita) e stiamo usando il Pro, tentiamo il fallback sul Flash
         if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3.1-pro-preview') {
-            console.warn("Quota Pro esaurita, tentativo di fallback su Gemini 3.1 Flash...");
-            return await apiProxy('gemini-3-flash-preview', contents, config);
+            console.warn("Quota Pro esaurita, tentativo di fallback su Gemini 3.7 Flash...");
+            return await apiProxy('gemini-3.7-flash', contents, config);
         }
 
         if (e.message?.includes("Requested entity was not found")) {
@@ -72,7 +72,7 @@ const textApiProxy = async (model: string, contents: any, config?: any) => {
     } catch (e: any) {
          console.error(`Gemini Text API Error (${model}):`, e);
          if ((e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) && model === 'gemini-3.1-pro-preview') {
-            return await textApiProxy('gemini-3-flash-preview', contents, config);
+            return await textApiProxy('gemini-3.7-flash', contents, config);
          }
          throw e;
     }
@@ -174,7 +174,7 @@ Esegui un'analisi tecnica dettagliata.`;
 export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: GarageVehicle): Promise<MaintenanceTips> => {
     const prompt = `Checklist pre-viaggio per ${motorcycle.model} destinazione ${itinerary.tripTitle}.`;
     const config = { responseMimeType: "application/json", responseSchema: MAINTENANCE_TIPS_SCHEMA };
-    const response = await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy('gemini-3.7-flash', { parts: [{ text: prompt }] }, config);
     return {
         essentialChecks: response.controlli_essenziali || [],
         tripSpecificTips: response.suggerimenti_specifici_viaggio || [],
@@ -185,13 +185,13 @@ export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: Garag
 export const generateTripDiarySummary = async (itinerary: Itinerary, entries: DiaryEntry[]): Promise<string> => {
     const diaryContent = entries.map(e => `Giorno ${e.day}: "${e.content}"`).join('\n');
     const prompt = `Scrivi il racconto epico del viaggio "${itinerary.tripTitle}" basandoti su queste note: ${diaryContent}.`;
-    return await textApiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] });
+    return await textApiProxy('gemini-3.7-flash', { parts: [{ text: prompt }] });
 };
 
 export const getVehicleSpecs = async (model: string, year: string) => {
     const prompt = `Restituisci i dati tecnici ufficiali per la moto ${model} (${year}). Assicurati di restituire un JSON valido e che tutti i valori numerici includano l'unità di misura e siano racchiusi tra virgolette come stringhe (es. "776 cc", "84 CV").`;
     const config = { responseMimeType: "application/json", responseSchema: VEHICLE_SPECS_SCHEMA };
-    const response = await apiProxy('gemini-3-flash-preview', { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy('gemini-3.7-flash', { parts: [{ text: prompt }] }, config);
     return {
         displacement: response.cilindrata || '',
         power: response.potenza || '',
@@ -206,7 +206,7 @@ export const createChatSession = (vehicle: GarageVehicle | null, history: Conten
     const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
 
     return ai.chats.create({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3.7-flash',
         config: { systemInstruction },
         history: history
     });
@@ -222,7 +222,7 @@ export const scanReceiptImage = async (image: File): Promise<ScannedReceiptData>
         reader.readAsDataURL(image);
     });
 
-    const response = await apiProxy('gemini-3-flash-preview', { 
+    const response = await apiProxy('gemini-3.7-flash', { 
         parts: [
             { text: prompt },
             { inlineData: { data: base64Data, mimeType: image.type } }
