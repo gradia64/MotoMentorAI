@@ -12,7 +12,7 @@ import { Chat, Content, GenerateContentResponse } from '@google/genai';
 import { SavedChat } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useGarageStore } from './useGarageStore';
-import { createChatSession, sendDirectChatMessage } from '../../services/geminiService';
+import { createChatSession } from '../../services/geminiService';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrors';
 
 interface ChatState {
@@ -52,12 +52,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         
         let session = chatSession;
         if (!session) {
-            try {
-                session = createChatSession(activeVehicle, chatHistory);
-                set({ chatSession: session });
-            } catch (initErr: any) {
-                console.warn("Init chat session error:", initErr);
-            }
+            session = createChatSession(activeVehicle, chatHistory);
+            set({ chatSession: session });
         }
 
         const userMsg: Content = { role: 'user', parts: [{ text: message }] };
@@ -72,42 +68,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     set({ chatSession: session });
                 }
 
-                if (session) {
-                    const streamResponse = await session.sendMessageStream({ message });
-                    let fullText = "";
-                    for await (const chunk of streamResponse) {
-                        const c = chunk as GenerateContentResponse;
-                        fullText += c.text || "";
-                        set({ chatHistory: [...updatedHistory, { role: 'model', parts: [{ text: fullText }] }] });
-                    }
-                    return true;
+                if (!session) return false;
+                const streamResponse = await session.sendMessageStream({ message });
+                let fullText = "";
+                for await (const chunk of streamResponse) {
+                    const c = chunk as GenerateContentResponse;
+                    fullText += c.text || "";
+                    set({ chatHistory: [...updatedHistory, { role: 'model', parts: [{ text: fullText }] }] });
                 }
-                throw new Error("Sessione chat non disponibile.");
+                return true;
             } catch (err: any) {
-                console.warn(`Chat attempt ${attempt} stream failed:`, err);
-                
-                // Fallback trasparente: chiamata diretta standard
-                try {
-                    const directResponse = await sendDirectChatMessage(activeVehicle, historyBeforeMessage, message);
-                    if (directResponse) {
-                        set({ chatHistory: [...updatedHistory, { role: 'model', parts: [{ text: directResponse }] }] });
-                        return true;
-                    }
-                } catch (directErr: any) {
-                    console.error("Direct fallback failed:", directErr);
-                }
-
+                console.error(`Chat attempt ${attempt} failed:`, err);
                 const isTransient = err.message?.includes("429") || err.message?.includes("RESOURCE_EXHAUSTED") || err.message?.includes("fetch");
+                
                 if (isTransient && attempt < 3) {
-                    await new Promise(resolve => setTimeout(resolve, attempt * 1500));
-                    session = null;
+                    await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+                    if (attempt === 2) session = null;
                     return await trySendMessage(attempt + 1);
                 }
                 
-                const errorMsg = err.message?.includes("safety") 
-                    ? "Bloccato dai filtri di sicurezza." 
-                    : (err.message || "Errore connessione chat.");
-                showNotification(errorMsg, "error");
+                showNotification(err.message?.includes("safety") ? "Bloccato dai filtri di sicurezza." : "Errore connessione chat.", "error");
                 set({ chatHistory: historyBeforeMessage, chatSession: null });
                 return false;
             }
