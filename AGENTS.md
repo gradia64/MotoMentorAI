@@ -43,10 +43,11 @@ impronte in `scripts/release-keys.sh`, pubblica in `packaging/motomentor-release
 Chiave pubblicata su keys.openpgp.org (email confermata) e
 keyserver.ubuntu.com; `git config` di firma fatto in questo checkout.
 Environment `release` su GitHub creato (revisore gradia64, solo tag `v*`).
-Note e CHANGELOG della 1.0.0 chiusi. Un primo tag `v1.0.0`
-(su `7e0ec13`) è stato cancellato: la release si era fermata al controllo del
-CHANGELOG senza pubblicare nulla. **Da fare**: rifirmare `v1.0.0` sul commit
-di chiusura e approvare il job `publish`.
+**v1.0.0 rilasciata il 2026-10-27** (tag firmato su `b2b5c16`,
+release GitHub con `.deb`, AppImage e `SHA256SUMS`; checksum e attestazioni
+verificati). Due tentativi precedenti di `v1.0.0` erano stati cancellati senza
+pubblicare nulla: il primo si era fermato al CHANGELOG, il secondo a un bug di
+`scripts/check-packages.sh` con percorsi relativi (corretto in `b2b5c16`).
 Scelta voluta (non è un bug): l'export GPX del viaggio condiviso salva un file
 per tappa, con un dialog ciascuno, per avere una traccia per ogni giorno di viaggio.
 
@@ -148,9 +149,8 @@ target deb+AppImage, icona `build/icons`).
 1. **Smoke-test GUI dei flussi corretti**: doppio click su `.mmt.json` con app chiusa
    (handshake `app:ready`), funzione IA con chiave reale (fallback filtrato), export
    PDF/GPX (ora col dialog di salvataggio).
-2. **Primo rilascio 1.0.0**: completare la configurazione
-   (`packaging/README.md`, punti 2 e 3), poi i passi «A ogni rilascio». L'AppImage richiede
-   `libfuse.so.2` a runtime.
+2. Prossimi rilasci: passi «A ogni rilascio» di `packaging/README.md`.
+   L'AppImage richiede `libfuse.so.2` a runtime.
 3. (Opzionale) Fix cosmetico WM_CLASS se il grouping taskbar dà fastidio.
 4. (Opzionale) Font Unicode nei PDF (vedi nota sopra).
 5. (Opzionale) Pulizia: rimuovere routing legacy `/shared/` e/o collection `sharedTrips` locale.
