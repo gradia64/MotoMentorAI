@@ -1,7 +1,7 @@
 // Normalizzazione di itinerari provenienti da fonti non fidate (file .mmt.json
 // condivisi, import JSON dello storico): ogni campo viene ricondotto al tipo
 // atteso, così la UI e i PDF non vanno in crash su dati malformati.
-import { Day, GpxPoint, Itinerary, SavedTrip, DiaryEntry } from '../../types';
+import type { Day, GpxPoint, Itinerary, SavedTrip, DiaryEntry } from '../../types';
 
 const str = (v: unknown, fallback = ''): string =>
     typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : fallback);

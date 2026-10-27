@@ -1,0 +1,156 @@
+# Release: sui tag v*, .deb e AppImage costruiti dal tag e allegati alla
+# release GitHub. Ripreso dal release.yml di Plico (e da lì di OllaDesk):
+#
+# - il tag lo firma la sottochiave dei tag della chiave di rilascio di
+#   MotoMentor AI (packaging/motomentor-release-key.asc, impronte in
+#   scripts/release-keys.sh): qui lo si VERIFICA con scripts/verify-tag.sh, e
+#   un tag non firmato o firmato da un'altra chiave ferma tutto;
+# - gli allegati non li firma una chiave nella CI: hanno SHA256SUMS e
+#   un'attestazione di provenienza di GitHub, che lega ogni file a questo
+#   workflow e al commit del tag. Si verifica con
+#   gh attestation verify <file> -R gradia64/MotoMentorAI
+#   Così la CI non ha nessun segreto da custodire.
+#
+# Allegati: motomentor-ai_X.Y.Z_amd64.deb, motomentor-ai-X.Y.Z-x86_64.AppImage,
+# SHA256SUMS. Procedura completa in packaging/README.md.
+#
+# A mano (workflow_dispatch) costruisce e collauda gli stessi pacchetti dal
+# ramo scelto, senza pubblicare niente: per provare il packaging prima di un tag.
+#
+# Le action sono fissate per SHA (commento = versione), tranne
+# attest-build-provenance, alla major come in Plico.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read   # solo publish alza i permessi
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false   # una release a metà non si interrompe
+
+jobs:
+  verify:
+    name: Tag firmato e versione
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Tag annotato e firmato dalla sottochiave dei tag
+        run: |
+          # checkout può riscrivere il tag come leggero: si riprende l'oggetto
+          # tag annotato com'è sul server prima di verificarne la firma
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          scripts/verify-tag.sh "$GITHUB_REF_NAME"
+
+      - name: Il tag corrisponde alla versione del codice
+        run: scripts/check-version.sh "$GITHUB_REF_NAME"
+
+      # la descrizione della release: scritta e riletta prima del tag
+      - name: Note di rilascio presenti
+        run: scripts/release-notes.sh "$GITHUB_REF_NAME" > /dev/null
+
+  tests:
+    needs: verify
+    # sui tag dopo verify; a mano senza (verify lì è saltato)
+    if: >-
+      !cancelled()
+      && (needs.verify.result == 'success'
+          || (github.event_name == 'workflow_dispatch' && needs.verify.result == 'skipped'))
+    uses: ./.github/workflows/ci.yml
+
+  packages:
+    name: .deb e AppImage
+    needs: tests
+    # senza questa condizione, a mano verify (saltato) farebbe saltare anche
+    # questo job, pur con i test passati
+    if: ${{ !cancelled() && needs.tests.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+
+      # qui gli script di installazione servono: scaricano Electron
+      - name: Dipendenze
+        run: npm ci
+
+      # --publish never: electron-builder non deve mai caricare niente da sé,
+      # la release la crea solo il job publish
+      - name: Pacchetti
+        run: |
+          npm run build
+          npx electron-builder --linux deb AppImage --publish never
+
+      # versione, contenuto di app.asar, voce desktop e associazione .mmt.json
+      - name: Collaudo dei pacchetti
+        run: scripts/check-packages.sh release
+
+      - name: SHA-256
+        run: sha256sum release/*.deb release/*.AppImage | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: packages
+          path: |
+            release/*.deb
+            release/*.AppImage
+          retention-days: 14
+
+  publish:
+    name: Release su GitHub
+    needs: [verify, packages]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    # come in Plico: l'ultimo punto di controllo prima di pubblicare. Con
+    # «Required reviewers» nelle impostazioni dell'environment, il job aspetta
+    # l'approvazione del maintainer. Nessun secret.
+    environment: release
+    permissions:
+      contents: write        # creare la release e caricare i file
+      id-token: write        # attestazione di provenienza
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: packages
+          path: dist/
+
+      - name: SHA256SUMS
+        run: |
+          cd dist
+          sha256sum *.deb *.AppImage > SHA256SUMS
+          tee -a "$GITHUB_STEP_SUMMARY" < SHA256SUMS
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/*.deb
+            dist/*.AppImage
+
+      - name: Allega alla release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          scripts/release-notes.sh "$tag" > "$RUNNER_TEMP/note.md"
+          # una release già esistente (creata a mano, o un rilancio) resta
+          # com'è: si caricano solo i file
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* --verify-tag --title "MotoMentor AI ${tag#v}" \
+              --notes-file "$RUNNER_TEMP/note.md"
+          fi

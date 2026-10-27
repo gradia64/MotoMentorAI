@@ -1,7 +1,7 @@
 # AGENTS.md — MotoMentor AI
 
 _Punto di riferimento per riprendere il lavoro dopo un'interruzione di sessione.
-Aggiornato il 2026-10-27 (dopo la seconda sessione di bug-fix)._
+Aggiornato il 2026-10-27 (bug-fix minori e procedura di rilascio)._
 
 ## Stato (2026-10-27 — migrazione completata + bug-fix, tutto su `main`)
 Migrazione desktop Electron (dati 100% locali) completata, verificata end-to-end e
@@ -26,19 +26,31 @@ fallback AI, date locali, ecc. (dettagli nel messaggio del commit).
 - chat: dopo il fallback diretto la sessione viene ricreata dallo storico;
 - `shareTrip` scrive in `sharedTrips` solo dopo il salvataggio del file;
   `SharedTripView` via `id` ora mostra il viaggio.
-Problemi a bassa priorità ancora aperti: date UTC in `MaintenanceLog`/scanner,
-chiave Gemini non riapplicata alla
-chat aperta, nessun limite di dimensione per immagini diagnosi/scontrino, note del
-diario perse cambiando viaggio, input immagini mappa non resettato, diagnosi orfane
-dopo l'eliminazione di un veicolo.
+**Bug minori (2026-10-27, dopo `0a39b06`)**: date locali (`todayLocalISO`,
+`formatLocalDate`, `localDateTime` in `src/utils/hooks.ts`), chat ricreata quando
+cambia la chiave Gemini, limite di 10 MB alle immagini inviate all'IA
+(`MAX_AI_IMAGES_BYTES` in `geminiService.ts`), conferma nel Diario cambiando
+viaggio, input immagini del Planner azzerato, eliminare un veicolo elimina anche
+le sue diagnosi, interventi e promemoria.
+
+**Procedura di rilascio** (in linea con Plico/OllaDesk/KlamAV-Py, dettagli in
+`packaging/README.md`): tag `vX.Y.Z` firmato dalla sottochiave dei tag →
+`release.yml` (verify → `ci.yml` → `.deb`+AppImage + `scripts/check-packages.sh`
+→ publish con approvazione nell'environment `release`, `SHA256SUMS` e
+attestazione di provenienza; nessun secret). **Ancora da fare a mano**: creare la
+chiave di rilascio, scrivere le impronte in `scripts/release-keys.sh` e nel
+README, esportare `packaging/motomentor-release-key.asc`, creare l'environment
+`release` su GitHub, rileggere `packaging/release-notes/1.0.0.md` (in BOZZA).
 Scelta voluta (non è un bug): l'export GPX del viaggio condiviso salva un file
 per tappa, con un dialog ciascuno, per avere una traccia per ogni giorno di viaggio.
 
 Verifiche correnti:
 - ✅ `tsc --noEmit` → 0 errori; `vite build` OK.
-- ✅ Test funzionali su `electron/main/db.js`: 14/14 (scope globale `sharedTrips`,
-  upsert/delete altrui rifiutati, isolamento path tra utenti, open idempotente).
-- ✅ Test della normalizzazione itinerari (`src/utils/itinerary.ts`): 8/8.
+- ✅ `npm test` (node:test, `tests/`): 10/10 — layer SQLite (scope `sharedTrips`,
+  upsert/delete altrui rifiutati, isolamento path, auth, open idempotente) e
+  utility del renderer (normalizzazione itinerari, date locali). Le utility TS
+  sono compilate da `tsc -p tests/tsconfig.json` (il Node di Debian non toglie i tipi).
+- ✅ `scripts/check-packages.sh` sul `.deb` e sull'AppImage 1.0.0.
 - ✅ `.deb` ricostruito **dopo** le correzioni: `release/motomentor-ai_1.0.0_amd64.deb`.
 
 ## Come costruire / verificare (comandi)
@@ -49,6 +61,8 @@ npm run lint                      # tsc --noEmit  → typecheck
 npm run build                     # vite build   → dist/
 npm run electron:dev              # build + avvia Electron in dev (Vite su :5173)
 npm run dist:deb                  # build + electron-builder --linux deb  → release/*.deb
+npm test                          # test (tests/*.test.mjs)
+npm run dist && scripts/check-packages.sh   # .deb + AppImage e loro collaudo
 ```
 Test rapido del layer DB (indipendente da Electron, usa il node del sistema):
 ```bash
@@ -128,8 +142,9 @@ target deb+AppImage, icona `build/icons`).
 1. **Smoke-test GUI dei flussi corretti**: doppio click su `.mmt.json` con app chiusa
    (handshake `app:ready`), funzione IA con chiave reale (fallback filtrato), export
    PDF/GPX (ora col dialog di salvataggio).
-2. (Opzionale) **AppImage**: configurata ma non costruita (a runtime serve libfuse).
-   `npm run dist` builda sia deb sia AppImage.
+2. **Primo rilascio 1.0.0**: completare la configurazione della chiave
+   (`packaging/README.md`), poi i passi «A ogni rilascio». L'AppImage richiede
+   `libfuse.so.2` a runtime.
 3. (Opzionale) Fix cosmetico WM_CLASS se il grouping taskbar dà fastidio.
 4. (Opzionale) Font Unicode nei PDF (vedi nota sopra).
 5. (Opzionale) Pulizia: rimuovere routing legacy `/shared/` e/o collection `sharedTrips` locale.

@@ -1,0 +1,14 @@
+{
+  // Compila le utility TypeScript del renderer per i test con node --test
+  // (il Node di Debian non toglie da sé i tipi). L'output finisce dentro
+  // node_modules, così "react" si risolve e package.json ("type": "module")
+  // vale anche per i .js generati.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "rootDir": "..",
+    "outDir": "../node_modules/.cache/motomentor-tests"
+  },
+  "include": ["../src/utils/itinerary.ts", "../src/utils/hooks.ts"]
+}

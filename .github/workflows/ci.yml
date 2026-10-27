@@ -1,0 +1,38 @@
+# Controlli a ogni push e pull request: typecheck, test (layer SQLite e
+# utility del renderer) e build del renderer. Nessun segreto, permessi in
+# sola lettura. Le action sono fissate per SHA (commento = versione).
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_call:   # riusato da release.yml prima di costruire i pacchetti
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # node:sqlite richiede Node ≥ 22.5; 24 come in sviluppo
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+
+      # gli script di installazione (electron, esbuild) non servono per i test
+      - name: Dipendenze
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build del renderer
+        run: npm run build

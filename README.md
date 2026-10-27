@@ -23,6 +23,7 @@ Assistente personale per motociclisti: **pianificazione viaggi con IA, garage co
 ```bash
 npm install
 npm run lint          # typecheck (tsc)
+npm test              # test del layer SQLite e delle utility del renderer
 npm run build         # build del renderer (vite → dist/)
 npm run electron:run  # avvia l'app Electron sul build corrente
 npm run electron:dev  # build + avvio in modalità dev (devtools aperti)
@@ -33,6 +34,35 @@ npm run electron:dev  # build + avvio in modalità dev (devtools aperti)
 ```bash
 npm run dist:deb   # .deb  → release/motomentor-ai_<version>_amd64.deb
 npm run dist       # .deb + AppImage
+scripts/check-packages.sh   # collaudo statico dei pacchetti in release/
+```
+
+## Rilascio
+
+Un tag firmato `vX.Y.Z` avvia `.github/workflows/release.yml`: verifica firma
+e versione, costruisce e collauda `.deb` e AppImage e li allega alla release
+GitHub con `SHA256SUMS` e un'attestazione di provenienza. Procedura completa,
+configurazione della chiave inclusa, in [packaging/README.md](packaging/README.md).
+
+```bash
+git tag -s vX.Y.Z -m "MotoMentor AI X.Y.Z"
+scripts/verify-tag.sh vX.Y.Z
+git push origin vX.Y.Z
+```
+
+## Verifica
+
+I tag si firmano con la **chiave di rilascio di MotoMentor AI** (chiave
+pubblica in `packaging/motomentor-release-key.asc`):
+
+- primaria: *da completare dopo la creazione della chiave*
+- sottochiave dei tag: *da completare dopo la creazione della chiave*
+
+Per un pacchetto scaricato dalla release:
+
+```bash
+sha256sum -c SHA256SUMS --ignore-missing
+gh attestation verify motomentor-ai_X.Y.Z_amd64.deb -R gradia64/MotoMentorAI
 ```
 
 ## Dove finiscono i miei dati?

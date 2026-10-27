@@ -11,6 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
+    "test": "tsc -p tests/tsconfig.json && node --test --disable-warning=ExperimentalWarning \"tests/*.test.mjs\"",
     "electron:dev": "npm run build && MMAI_DEV=1 electron .",
     "electron:run": "electron .",
     "dist": "npm run build && electron-builder --linux",

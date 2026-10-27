@@ -1,0 +1,55 @@
+// Test delle utility del renderer scritte in TypeScript, compilate prima da
+// tsc (tests/tsconfig.json, npm test) senza passare da Vite.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { normalizeItinerary, normalizeSavedTrip } from '../node_modules/.cache/motomentor-tests/src/utils/itinerary.js';
+import { todayLocalISO, formatLocalDate, localDateTime } from '../node_modules/.cache/motomentor-tests/src/utils/hooks.js';
+
+test('normalizeItinerary rifiuta ciò che non è un itinerario', () => {
+  assert.equal(normalizeItinerary(null), null);
+  assert.equal(normalizeItinerary({}), null);
+  assert.equal(normalizeItinerary({ dailySchedule: 'no' }), null);
+});
+
+test('normalizeItinerary riconduce i campi ai tipi attesi', () => {
+  const it = normalizeItinerary({
+    tripTitle: 'T',
+    dailySchedule: [
+      {
+        day: '2',
+        stageKilometers: '120',
+        gpxTrack: [{ lat: '45', lon: 7 }, { lat: 'x', lon: 1 }, { lat: 200, lon: 0 }],
+        weatherForecast: null,
+        activities: 'no',
+      },
+      null,
+      'stringa',
+    ],
+  });
+  assert.equal(it.dailySchedule.length, 1);
+  const [day] = it.dailySchedule;
+  assert.equal(day.day, 2);
+  assert.equal(day.stageKilometers, 120);          // numero, non concatenazione di stringhe
+  assert.deepEqual(day.gpxTrack, [{ lat: 45, lon: 7 }]);
+  assert.equal(day.weatherForecast.icon, 'cloud');
+  assert.deepEqual(day.activities, []);
+});
+
+test('normalizeSavedTrip scarta i viaggi malformati e normalizza il diario', () => {
+  assert.equal(normalizeSavedTrip({ id: 'a', itinerary: {} }), null);
+  assert.equal(normalizeSavedTrip({ itinerary: { dailySchedule: [] } }), null);
+  const trip = normalizeSavedTrip({ id: 'a', itinerary: { dailySchedule: [] }, diaryEntries: [{ day: 1 }, 5] });
+  assert.deepEqual(trip.diaryEntries, [{ day: 1, content: '' }]);
+});
+
+test('todayLocalISO usa il fuso locale', () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  assert.equal(todayLocalISO(), `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+});
+
+test('le date YYYY-MM-DD non slittano di un giorno', () => {
+  assert.equal(formatLocalDate('2026-03-01'), '01/03/2026');
+  assert.equal(formatLocalDate(''), 'N/D');
+  assert.ok(localDateTime('2026-03-02') > localDateTime('2026-03-01'));
+});
