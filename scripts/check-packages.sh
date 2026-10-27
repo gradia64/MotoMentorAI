@@ -13,7 +13,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DIR="${1:-$ROOT/release}"
+# assoluto: più sotto si estrae l'AppImage da una cartella temporanea
+DIR="$(realpath -m "${1:-$ROOT/release}")"
+# node -e risolve @electron/asar dalla cartella corrente
+cd "$ROOT"
 VERSION="$(node -p "require('$ROOT/package.json').version")"
 NAME="$(node -p "require('$ROOT/package.json').name")"
 MIME="application/x-motomentor-trip"
