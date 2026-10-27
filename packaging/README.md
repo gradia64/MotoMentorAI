@@ -32,13 +32,25 @@ SHA256SUMS                             checksum dei due file
 
 Come per gli altri progetti, una chiave OpenPGP dedicata: la **primaria**
 solo certifica e non lascia la tua macchina; una **sottochiave** firma i tag.
-Sulla tua macchina (gpg chiede una passphrase per la chiave):
+Creata il 2026-10-27: primaria `B9BE9034B84C16D70F8BB0DDB26652F3D81EACE4` (scade il 2031-10-26), sottochiave dei
+tag `989392EDD3CC209FC62D73D41B75E7B40108A445` (scade il 2029-10-26).
+
+Nei comandi qui sotto le impronte stanno in variabili di shell: un segnaposto
+tra parentesi angolari (`<PRIMARIA>`) bash lo leggerebbe come redirezione da
+un file, e il comando fallirebbe.
+
+```bash
+PRIMARIA=B9BE9034B84C16D70F8BB0DDB26652F3D81EACE4
+SOTTOCHIAVE=989392EDD3CC209FC62D73D41B75E7B40108A445
+```
+
+Per ricrearla da zero (gpg chiede una passphrase per la chiave):
 
 ```bash
 gpg --quick-gen-key "MotoMentor AI release key <gradia@disroot.org>" ed25519 cert 5y
-gpg --list-keys "MotoMentor AI release key"           # impronta della primaria
-gpg --quick-add-key <PRIMARIA> ed25519 sign 3y        # sottochiave dei tag
-gpg --list-keys --with-subkey-fingerprints <PRIMARIA> # impronta della sottochiave [S]
+PRIMARIA=$(gpg --with-colons --list-keys "MotoMentor AI release key" | awk -F: '$1=="fpr"{print $10; exit}')
+gpg --quick-add-key "$PRIMARIA" ed25519 sign 3y       # sottochiave dei tag
+gpg --list-keys --with-subkey-fingerprints "$PRIMARIA" # impronta della sottochiave [S]
 ```
 
 Poi, nel repository:
@@ -46,30 +58,30 @@ Poi, nel repository:
 1. scrivi le due impronte in `scripts/release-keys.sh` (`RELEASE_PRIMARY` e
    `TAG_SIGNING_SUBKEYS`) e nella sezione «Verifica» del `README.md`;
 2. esporta la chiave pubblica:
-   `gpg --armor --export <PRIMARIA> > packaging/motomentor-release-key.asc`;
+   `gpg --armor --export "$PRIMARIA" > packaging/motomentor-release-key.asc`;
 3. pubblicala, perché chiunque possa verificare i tag:
 
    ```bash
-   gpg --keyserver hkps://keys.openpgp.org --send-keys <PRIMARIA>
-   gpg --keyserver hkps://keyserver.ubuntu.com --send-keys <PRIMARIA>
+   gpg --keyserver hkps://keys.openpgp.org --send-keys "$PRIMARIA"
+   gpg --keyserver hkps://keyserver.ubuntu.com --send-keys "$PRIMARIA"
    ```
 
    keys.openpgp.org mostra nome ed email solo dopo la conferma dell'indirizzo:
-   `gpg --export <PRIMARIA> | curl -T - https://keys.openpgp.org` e segui il
+   `gpg --export "$PRIMARIA" | curl -T - https://keys.openpgp.org` e segui il
    link stampato.
 
 4. commit e push di `scripts/release-keys.sh`, `README.md` e
    `packaging/motomentor-release-key.asc`.
 
 Conserva un backup della primaria fuori dal computer (`gpg --export-secret-keys
---armor <PRIMARIA>`), e il certificato di revoca che gpg ha creato in
+--armor "$PRIMARIA"`), e il certificato di revoca che gpg ha creato in
 `~/.gnupg/openpgp-revocs.d/`.
 
 ### 2. git in questo checkout
 
 ```bash
 git config gpg.format openpgp
-git config user.signingkey '<SOTTOCHIAVE>!'   # «!»: proprio questa sottochiave
+git config user.signingkey "$SOTTOCHIAVE!"   # «!»: proprio questa sottochiave
 git config tag.gpgSign true
 ```
 

@@ -55,8 +55,8 @@ git push origin vX.Y.Z
 I tag si firmano con la **chiave di rilascio di MotoMentor AI** (chiave
 pubblica in `packaging/motomentor-release-key.asc`):
 
-- primaria: *da completare dopo la creazione della chiave*
-- sottochiave dei tag: *da completare dopo la creazione della chiave*
+- primaria: `B9BE 9034 B84C 16D7 0F8B  B0DD B266 52F3 D81E ACE4` (solo certificazione)
+- sottochiave dei tag: `9893 92ED D3CC 209F C62D  73D4 1B75 E7B4 0108 A445`
 
 Per un pacchetto scaricato dalla release:
 

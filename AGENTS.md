@@ -37,10 +37,12 @@ le sue diagnosi, interventi e promemoria.
 `packaging/README.md`): tag `vX.Y.Z` firmato dalla sottochiave dei tag →
 `release.yml` (verify → `ci.yml` → `.deb`+AppImage + `scripts/check-packages.sh`
 → publish con approvazione nell'environment `release`, `SHA256SUMS` e
-attestazione di provenienza; nessun secret). **Ancora da fare a mano**: creare la
-chiave di rilascio, scrivere le impronte in `scripts/release-keys.sh` e nel
-README, esportare `packaging/motomentor-release-key.asc`, creare l'environment
-`release` su GitHub, rileggere `packaging/release-notes/1.0.0.md` (in BOZZA).
+attestazione di provenienza; nessun secret). Chiave di rilascio creata il
+2026-10-27 (primaria `B9BE9034…D81EACE4`, sottochiave dei tag `989392ED…0108A445`,
+impronte in `scripts/release-keys.sh`, pubblica in `packaging/motomentor-release-key.asc`).
+**Ancora da fare a mano**: `git config` di firma nel checkout, pubblicare la
+chiave sui keyserver, creare l'environment `release` su GitHub, rileggere
+`packaging/release-notes/1.0.0.md` (in BOZZA).
 Scelta voluta (non è un bug): l'export GPX del viaggio condiviso salva un file
 per tappa, con un dialog ciascuno, per avere una traccia per ogni giorno di viaggio.
 
@@ -142,8 +144,8 @@ target deb+AppImage, icona `build/icons`).
 1. **Smoke-test GUI dei flussi corretti**: doppio click su `.mmt.json` con app chiusa
    (handshake `app:ready`), funzione IA con chiave reale (fallback filtrato), export
    PDF/GPX (ora col dialog di salvataggio).
-2. **Primo rilascio 1.0.0**: completare la configurazione della chiave
-   (`packaging/README.md`), poi i passi «A ogni rilascio». L'AppImage richiede
+2. **Primo rilascio 1.0.0**: completare la configurazione
+   (`packaging/README.md`, punti 2 e 3), poi i passi «A ogni rilascio». L'AppImage richiede
    `libfuse.so.2` a runtime.
 3. (Opzionale) Fix cosmetico WM_CLASS se il grouping taskbar dà fastidio.
 4. (Opzionale) Font Unicode nei PDF (vedi nota sopra).
