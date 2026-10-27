@@ -10,7 +10,7 @@
 #
 # La primaria [C], solo sulla macchina del maintainer: certifica le
 # sottochiavi. Non firma nulla.
-RELEASE_PRIMARY="${MOTOMENTOR_RELEASE_PRIMARY:-}"
+RELEASE_PRIMARY="${B9BE9034B84C16D70F8BB0DDB26652F3D81EACE4:-}"
 # Sottochiavi che possono firmare i TAG: solo quelle del maintainer, mai nella
 # CI. Più di una, separate da spazi, solo durante una rotazione.
-TAG_SIGNING_SUBKEYS="${MOTOMENTOR_TAG_SIGNING_SUBKEYS:-}"
+TAG_SIGNING_SUBKEYS="${989392EDD3CC209FC62D73D41B75E7B40108A445:-}"
