@@ -1,32 +1,29 @@
 # AGENTS.md — MotoMentor AI
 
 _Punto di riferimento per riprendere il lavoro dopo un'interruzione di sessione.
-Aggiornato il 2026-10-27._
+Aggiornato il 2026-10-27 (dopo la sessione di bug-fix)._
 
-## Stato (aggiornato 2026-10-27 — migrazione completata e verificata)
-Migrazione **completata e verificata end-to-end**: l'app gira come desktop Electron con
-dati 100% locali. Smoke-test GUI superato (login, CRUD, Gemini, persistenza dopo riavvio).
-Committata su branch `local-desktop` (commit `d933d31` + follow-up).
+## Stato (2026-10-27 — migrazione completata + bug-fix, tutto su `main`)
+Migrazione desktop Electron (dati 100% locali) completata, verificata end-to-end e
+smoke-testata. Successiva **sessione di bug-fix completata**: 23 bug corretti
+(commit `bc60270`, pushato su `origin/main`) — race all'avvio dei viaggi condivisi,
+crash non gestiti, notifiche, GPX invalidi, scope `sharedTrips`, link esterni,
+fallback AI, date locali, ecc. (dettagli nel messaggio del commit).
 
-## Stato attuale (2026-10-27)
-- ✅ Migrazione codice completata (5 store, auth, login, settings, Electron main/preload/db).
-- ✅ `tsc --noEmit` → 0 errori.
-- ✅ `vite build` → `dist/` prodotta, Tailwind compilato, **zero CDN**, offline.
-- ✅ Layer persistenza testato: **13/13** test su `electron/main/db.js`
-  (node:sqlite + bcrypt, auth, scope enforcement, sharedTrips).
-- ✅ `.deb` costruito: `release/motomentor-ai_1.0.0_amd64.deb` (~108 MB), validato con `dpkg-deb`.
-- ✅ **Committato** su branch `local-desktop` (commit `d933d31`).
-- ✅ **Smoke-test GUI superato** (2026-10-27): login, CRUD, chiamata Gemini e
-  persistenza dopo riavvio OK.
+Verifiche correnti:
+- ✅ `tsc --noEmit` → 0 errori; `vite build` OK.
+- ✅ Test funzionali su `electron/main/db.js`: 8/8 (scope globale `sharedTrips`,
+  preservazione proprietà in upsert, isolamento path tra utenti, delete solo owner).
+- ✅ `.deb` ricostruito **dopo** le correzioni: `release/motomentor-ai_1.0.0_amd64.deb`.
 
 ## Come costruire / verificare (comandi)
 ```bash
-cd /home/gradia/Documenti/MotoMentorAI
+cd /home/gradia/Progetti/MotoMentorAI
 npm install                       # dipendenze (esbuild postinstall bloccato da npm: OK, il binario c'è)
 npm run lint                      # tsc --noEmit  → typecheck
 npm run build                     # vite build   → dist/
 npm run electron:dev              # build + avvia Electron in dev (Vite su :5173)
-npm run dist:deb                  # electron-builder --linux deb  → release/*.deb
+npm run dist:deb                  # build + electron-builder --linux deb  → release/*.deb
 ```
 Test rapido del layer DB (indipendente da Electron, usa il node del sistema):
 ```bash
@@ -39,21 +36,33 @@ node -e 'import("./electron/main/db.js").then(db=>{db.openDB(":memory:"); /* ...
 - `src/local/client.ts` + `src/local/types.ts` — astrazione di persistenza. Esporta le
   stesse operazioni di prima (`subscribeCollection`, `upsertDoc`, `removeDoc`, `listCollection`,
   auth, gemini key). Usa `window.motomentorDB` (esposto dal preload).
+  Dopo aver registrato `onOpenSharedTrip`, il renderer chiama `signalRendererReady()`.
 - `src/store/*` — i 5 store (auth, garage, trip, mechanic, chat) usano TUTTI `../local/client`
   (niente più `firebase/firestore`). `useAuthStore` ha `bootstrap()` che fa `initLocalDB()` + `checkAuth()`.
 - `src/utils/dataErrors.ts` — sostituisce il vecchio `firestoreErrors.ts`.
-- `components/Login.tsx` (username+password, registro/accesso) e `components/SettingsModal.tsx`
-  (imposta chiave Gemini). `App.tsx` chiama `bootstrap()` all'avvio e usa Login come gate.
+- `src/utils/hooks.ts` — `useEscapeKey` + `parseLocalDate` (date 'YYYY-MM-DD' come locali,
+  mai `new Date(str)` che usa la mezzanotte UTC).
+- `components/Login.tsx` (username+password, validazione client min 3/6) e
+  `components/SettingsModal.tsx` (imposta chiave Gemini). `App.tsx` chiama `bootstrap()`
+  all'avvio e usa Login come gate; le `unhandledrejection` mostrano una notifica
+  (non la schermata fatale).
 
 **Main Electron (Node, fa tutto il lavoro pesante):**
 - `electron/main/index.js` — finestra, menu, IPC handlers, dialog per shared-trip `.mmt.json`,
   lettura/scrittura chiave Gemini in `~/.config/MotoMentorAI/gemini.key` (mode 0600).
+  Comportamenti introdotti col bug-fix: `setWindowOpenHandler` (link https → browser di
+  sistema), `will-download` (dialog di salvataggio per PDF/GPX), handshake `app:ready`
+  (il viaggio condiviso da argv/seconda istanza viene accodato finché il renderer non
+  segnala di aver registrato i listener), `saveGeminiKey` propaga gli errori.
 - `electron/main/db.js` — **cuore**: `node:sqlite` (`DatabaseSync`, nativo, zero compilazioni) +
   `bcryptjs` (pure-JS). Schema: tabella `users` + tabella generica `docs(path,id,user_id,data,updated_at)`.
   `docs` specchia Firestore: ogni doc è `(path, id)` con payload JSON. Enforcement: un path
-  `users/{uid}/...` è leggibile/writeabile solo dal proprietario; `sharedTrips` è globale.
+  `users/{uid}/...` è leggibile/scrivibile solo dal proprietario; `sharedTrips` è globale
+  in lettura (senza filtro user_id), l'upsert in conflitto NON ruba la proprietà e la
+  delete è riservata al proprietario.
 - `electron/preload/index.js` — `contextBridge` espone `window.motomentorDB` (contextIsolation on,
   nodeIntegration off). `subscribe()` = caricamento iniziale + riascolto su evento `db:changed`.
+  Espone anche `signalReady()`.
 
 **Dati a riposo:** `~/.config/MotoMentorAI/motomentor.db` (SQLite) + `media/` per immagini.
 **Config build:** `package.json` → `build` field (appId `com.motomentor.ai`, output `release/`,
@@ -64,11 +73,15 @@ target deb+AppImage, icona `build/icons`).
 - `docs(path, id, user_id, data JSON, updated_at)` — PK `(path,id)`, indici su user_id e path.
 - Collection logiche (tutti sotto `users/{uid}/`): `vehicles`, `trips`, `diagnoses`,
   `maintenance`, `reminders`, `chats`. Più `sharedTrips` (globale, non scoped).
+- Le collection sono ordinate per `updated_at` **ASC**: il "più recente" è l'ULTIMO elemento.
 - Tipi TS in `types.ts` (invariati). Schema Gemini (ITINERARY/MAINTENANCE_TIPS/VEHICLE_SPECS/RECEIPT_SCAN) in `types.ts`.
 
 ## Note / gotchie importanti
 - **Chiave Gemini mai nel bundle**: `vite.config.ts` NON inietta più la chiave. Viene letta dal
   main via IPC e iniettata su `window.GEMINI_API_KEY` (in `initLocalDB` e in SettingsModal al salvataggio).
+- **Fallback AI filtrato**: il passaggio a `FALLBACK_MODEL` (e il fallback "direct" della chat)
+  avviene solo per errori transitori/404 (`isTransientGeminiError` in `geminiService.ts`);
+  con chiave non valida si fallisce subito con un solo messaggio.
 - **`node:sqlite`** richiede Node ≥22.5. Il Node di sistema qui è v24; Electron 45 include Node 22.13+. OK.
 - **npm blocca gli install-scripts** (esbuild postinstall): il binario `@esbuild/linux-x64` è
   installato come optionalDep, quindi `vite build` funziona lo stesso. Non serve `npm audit fix`.
@@ -77,19 +90,28 @@ target deb+AppImage, icona `build/icons`).
 - **Tailwind/jsPDF ora sono npm** (`tailwind.config.js`, `postcss.config.js`, `src/index.css`,
   `src/utils/pdf.ts`): niente più CDN → offline completo.
 - **Service Worker / PWA rimossi** (non ha senso su desktop file://). `index.tsx` non lo registra.
-- File **vestigiali** da poter cancellare: `firestore.rules` (niente più Firestore). `firebase-applet-config.json`,
+- **PDF e font**: jsPDF usa font standard WinAnsi: gli accenti italiani passano, ma emoji o
+  caratteri fuori WinAnsi nell'output IA escono corrotti (miglioria futura: font Unicode embedded).
+- File vestigiali già rimossi: `firestore.rules` (commit `ba9146f`), `firebase-applet-config.json`,
   `firebase-blueprint.json`, `src/firebase.ts`, `manifest.json`, `metadata.json`, `vercel.json`,
-  `service-worker.js` sono già stati cancellati (staged come `D`).
+  `service-worker.js`.
+- Debito tecnico noto e accettato: routing legacy `/shared/` in `App.tsx` (morto su desktop,
+  tenuto per dev/web) e collection locale `sharedTrips` poco usata (l'unico lettore è il
+  routing legacy; si può eliminare tenendo solo lo scambio via file `.mmt.json`).
 
 ## Cosa manca / prossimi passi (in ordine)
-1. ~~**Smoke-test GUI**~~ ✅ fatto (2026-10-27).
-2. **Commit** dei 41 file su branch dedicato (es. `local-desktop`) — NON committato su `main`. ✅ fatto (commit `d933d31` + follow-up).
-3. (Opzionale) **Pulizia**: cancellare `firestore.rules` (vestigiale, niente più Firestore).
-4. (Opzionale) **AppImage**: configurato ma non costruito qui (a runtime serve libfuse).
+1. **Smoke-test GUI dei flussi corretti**: doppio click su `.mmt.json` con app chiusa
+   (handshake `app:ready`), funzione IA con chiave reale (fallback filtrato), export
+   PDF/GPX (ora col dialog di salvataggio).
+2. (Opzionale) **AppImage**: configurata ma non costruita (a runtime serve libfuse).
    `npm run dist` builda sia deb sia AppImage.
-5. (Opzionale) Fix cosmetico WM_CLASS se il grouping taskbar dà fastidio.
+3. (Opzionale) Fix cosmetico WM_CLASS se il grouping taskbar dà fastidio.
+4. (Opzionale) Font Unicode nei PDF (vedi nota sopra).
+5. (Opzionale) Pulizia: rimuovere routing legacy `/shared/` e/o collection `sharedTrips` locale.
 
 ## Riferimenti
-- Repo: `git@github.com:gradia64/MotoMentorAI.git`, branch corrente `local-desktop`.
+- Repo: `git@github.com:gradia64/MotoMentorAI.git` (origin), branch corrente `main`.
 - Licenza: GPL-3.0 (`LICENSE` presente).
-- Ultimo commit reale prima del lavoro: `dabe99d` "Aggiornamento da AI Studio - 2026-08-14".
+- Ultimo commit: `bc60270` "fix: correzione di 23 bug rilevati dall'analisi del codice".
+- Storia: migrazione su `local-desktop` (`d933d31` + follow-up) poi confluita in `main`;
+  pulizia `firestore.rules` in `ba9146f`; bug-fix in `bc60270` (pushato).
