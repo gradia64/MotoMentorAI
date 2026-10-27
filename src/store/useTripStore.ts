@@ -9,6 +9,7 @@ import { generateItinerary, generateTripDiarySummary } from '../../services/gemi
 import { generatePdf } from '../utils/pdf';
 import { downloadFile } from '../utils/mapsHelpers';
 import { handleDataError, OperationType } from '../utils/dataErrors';
+import { normalizeSavedTrip } from '../utils/itinerary';
 
 interface TripState {
     tripHistory: SavedTrip[];
@@ -47,6 +48,7 @@ interface TripState {
     downloadDiaryPdf: (trip: SavedTrip) => void;
     shareTrip: () => Promise<string | null>;
     getSharedTrip: (id: string) => Promise<SharedTrip | null>;
+    reset: () => void;
 }
 
 const initialDraft: TripState['draft'] = {
@@ -189,14 +191,20 @@ export const useTripStore = create<TripState>((set, get) => ({
 
             // Miglioria rispetto alla versione Firebase: l'import ora salva
             // davvero ogni viaggio nel database locale.
+            // Ogni viaggio viene normalizzato: un file malformato non deve
+            // poi mandare in crash il Diario o la generazione dei PDF.
             let saved = 0;
-            for (const trip of imported) {
-                if (trip && trip.id && trip.itinerary) {
-                    await upsertDoc(`users/${userId}/trips`, trip.id, { id: trip.id, userId, data: trip });
-                    saved++;
-                }
+            let skipped = 0;
+            for (const raw of imported) {
+                const trip = normalizeSavedTrip(raw);
+                if (!trip) { skipped++; continue; }
+                await upsertDoc(`users/${userId}/trips`, trip.id, { id: trip.id, userId, data: trip });
+                saved++;
             }
-            showNotification(`Importati ${saved} viaggi nell'archivio locale.`);
+            showNotification(
+                `Importati ${saved} viaggi nell'archivio locale.` + (skipped ? ` ${skipped} voci non valide ignorate.` : ''),
+                skipped ? 'warning' : 'success'
+            );
         } catch (e: any) {
             showNotification("Errore importazione: " + (e.message || "file non valido"), "error");
         }
@@ -301,18 +309,18 @@ export const useTripStore = create<TripState>((set, get) => ({
 
         try {
             // Con il desktop locale la condivisione e' un FILE esportabile
-            // (niente link cloud): si salva una copia anche nel DB locale per
-            // poter riaprire il viaggio condiviso dall'app.
-            await upsertDoc('sharedTrips', sharedId, sharedTrip);
+            // (niente link cloud). La copia nel DB locale si salva solo dopo
+            // che il file è stato scritto: un dialog annullato non deve
+            // lasciare righe orfane in sharedTrips.
             const saved = await saveSharedTripFile(sharedTrip);
-            if (saved) {
-                showNotification("Viaggio condiviso esportato come file!");
-            } else {
+            if (!saved) {
+                // Nessun file creato: il chiamante non deve mostrare il banner.
                 showNotification("Esportazione annullata.", "warning");
+                return null;
             }
-            // Se l'utente ha annullato il dialog di salvataggio non è stato
-            // creato nessun file: il chiamante non deve mostrare il banner.
-            return saved ? sharedId : null;
+            await upsertDoc('sharedTrips', sharedId, sharedTrip);
+            showNotification("Viaggio condiviso esportato come file!");
+            return sharedId;
         } catch (e: any) {
             showNotification(handleDataError(e, OperationType.WRITE, `sharedTrips/${sharedId}`), "error");
             return null;
@@ -329,5 +337,14 @@ export const useTripStore = create<TripState>((set, get) => ({
             console.error("Error fetching shared trip:", e);
             return null;
         }
-    }
+    },
+
+    reset: () => set({
+        tripHistory: [],
+        itinerary: null,
+        activeTripId: null,
+        activeDiaryTripId: null,
+        sharedTrip: null,
+        draft: initialDraft,
+    }),
 }));

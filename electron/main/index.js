@@ -65,10 +65,27 @@ function readSharedTripFile(filePath) {
   const raw = readFileSync(filePath, 'utf8');
   const obj = JSON.parse(raw);
   const trip = obj && obj.sharedTrip ? obj.sharedTrip : obj;
-  if (!trip || !trip.itinerary || !trip.tripTitle) {
+  // Controllo strutturale minimo: il renderer normalizza poi i singoli campi.
+  if (!trip || typeof trip !== 'object' || !trip.tripTitle
+      || !trip.itinerary || typeof trip.itinerary !== 'object'
+      || !Array.isArray(trip.itinerary.dailySchedule)) {
     throw new Error('Il file non contiene un viaggio MotoMentor valido.');
   }
   return trip;
+}
+
+// Cerca tra gli argomenti un file viaggio. La voce desktop usa %U, quindi il
+// file può arrivare sia come percorso sia come URI file://.
+function findSharedTripArg(argv) {
+  for (const a of argv) {
+    if (!/\.(mmt\.json|json)$/i.test(a)) continue;
+    let p = a;
+    if (/^file:\/\//i.test(a)) {
+      try { p = fileURLToPath(a); } catch { continue; }
+    }
+    if (existsSync(p)) return p;
+  }
+  return null;
 }
 
 async function openSharedTripDialog() {
@@ -256,8 +273,8 @@ if (!gotLock) {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
-      const p = argv.find(a => /\.(mmt\.json|json)$/i.test(a));
-      if (p && existsSync(p)) {
+      const p = findSharedTripArg(argv);
+      if (p) {
         try {
           sendSharedTripToRenderer(readSharedTripFile(p));
         } catch (e) {
@@ -273,8 +290,8 @@ if (!gotLock) {
     createWindow();
 
     // File viaggio passato come argomento all'avvio (es. doppio click su .mmt.json).
-    const argPath = process.argv.find(a => /\.(mmt\.json|json)$/i.test(a));
-    if (argPath && existsSync(argPath)) {
+    const argPath = findSharedTripArg(process.argv);
+    if (argPath) {
       try {
         sendSharedTripToRenderer(readSharedTripFile(argPath));
       } catch (e) { /* avvio normale */ }

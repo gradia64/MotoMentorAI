@@ -1,7 +1,7 @@
 # AGENTS.md — MotoMentor AI
 
 _Punto di riferimento per riprendere il lavoro dopo un'interruzione di sessione.
-Aggiornato il 2026-10-27 (dopo la sessione di bug-fix)._
+Aggiornato il 2026-10-27 (dopo la seconda sessione di bug-fix)._
 
 ## Stato (2026-10-27 — migrazione completata + bug-fix, tutto su `main`)
 Migrazione desktop Electron (dati 100% locali) completata, verificata end-to-end e
@@ -10,10 +10,33 @@ smoke-testata. Successiva **sessione di bug-fix completata**: 23 bug corretti
 crash non gestiti, notifiche, GPX invalidi, scope `sharedTrips`, link esterni,
 fallback AI, date locali, ecc. (dettagli nel messaggio del commit).
 
+**Seconda analisi (2026-10-27)**: corretti 11 problemi di gravità alta/media
+(non ancora committati al momento della scrittura):
+- store svuotati al cambio utente (reset in `App.tsx`), veicolo attivo salvato in
+  localStorage **per utente** (`motomentor_active_vehicle_{uid}`);
+- interventi/promemoria con `vehicleId` (i record vecchi senza campo restano visibili
+  per ogni veicolo); il libretto PDF include solo il veicolo attivo;
+- `.mmt.json` e import storico normalizzati da `src/utils/itinerary.ts`;
+  il main verifica che `dailySchedule` sia un array;
+- `.deb` con `fileAssociations` (MIME `application/x-motomentor-trip`, glob `*.mmt.json`);
+  il main accetta il file sia come percorso sia come URI `file://` (`%U`);
+- `db.js`: upsert/delete di documenti altrui → errore "Accesso negato";
+  `openDB` idempotente sulla stessa path (un reload non fa più logout);
+- `client.ts` toglie il prefisso "Error invoking remote method…" dagli errori IPC;
+- chat: dopo il fallback diretto la sessione viene ricreata dallo storico;
+- `shareTrip` scrive in `sharedTrips` solo dopo il salvataggio del file;
+  `SharedTripView` via `id` ora mostra il viaggio.
+Problemi a bassa priorità ancora aperti: date UTC in `MaintenanceLog`/scanner,
+un dialog per tappa nell'export GPX condiviso, chiave Gemini non riapplicata alla
+chat aperta, nessun limite di dimensione per immagini diagnosi/scontrino, note del
+diario perse cambiando viaggio, input immagini mappa non resettato, diagnosi orfane
+dopo l'eliminazione di un veicolo.
+
 Verifiche correnti:
 - ✅ `tsc --noEmit` → 0 errori; `vite build` OK.
-- ✅ Test funzionali su `electron/main/db.js`: 8/8 (scope globale `sharedTrips`,
-  preservazione proprietà in upsert, isolamento path tra utenti, delete solo owner).
+- ✅ Test funzionali su `electron/main/db.js`: 14/14 (scope globale `sharedTrips`,
+  upsert/delete altrui rifiutati, isolamento path tra utenti, open idempotente).
+- ✅ Test della normalizzazione itinerari (`src/utils/itinerary.ts`): 8/8.
 - ✅ `.deb` ricostruito **dopo** le correzioni: `release/motomentor-ai_1.0.0_amd64.deb`.
 
 ## Come costruire / verificare (comandi)

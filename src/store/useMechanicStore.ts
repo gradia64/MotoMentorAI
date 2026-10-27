@@ -40,6 +40,7 @@ interface MechanicState {
     downloadDiagnosisPdf: () => void;
     downloadChecklistPdf: () => void;
     downloadMaintenanceLogPdf: () => void;
+    reset: () => void;
 }
 
 // Formato documento: { id, userId, data } — identico a quanto faceva Firestore.
@@ -51,18 +52,27 @@ interface Doc<T> {
 
 const currentUid = (): string | undefined => useAuthStore.getState().user?.id;
 
-export const useMechanicStore = create<MechanicState>((set, get) => ({
-    maintenanceLog: [],
-    reminders: [],
-    savedDiagnoses: [],
+// Interventi e promemoria appartengono a un veicolo. I record senza vehicleId
+// (creati prima del campo) non sono attribuibili e restano visibili ovunque.
+export const belongsToVehicle = (item: { vehicleId?: string }, vehicleId: string | undefined): boolean =>
+    !item.vehicleId || item.vehicleId === vehicleId;
+
+const initialMechanicState = {
+    maintenanceLog: [] as MaintenanceRecord[],
+    reminders: [] as MaintenanceReminder[],
+    savedDiagnoses: [] as SavedDiagnosis[],
     diagnosis: null,
     activeDiagnosisId: null,
     maintenanceTips: null,
-    mechanicMode: 'workshop',
+    mechanicMode: 'workshop' as const,
     draft: {
         problemDescription: '',
         problemImage: null,
     },
+};
+
+export const useMechanicStore = create<MechanicState>((set, get) => ({
+    ...initialMechanicState,
 
     initMechanic: (userId) => {
         const unsub1 = subscribeCollection<Doc<MaintenanceRecord>>(`users/${userId}/maintenance`, (rows) => {
@@ -158,9 +168,14 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
 
     addMaintenanceRecord: async (record) => {
         const { showNotification } = useUIStore.getState();
+        const { activeVehicle } = useGarageStore.getState();
         const userId = currentUid();
         if (!userId) return;
-        const newRecord = { ...record, id: crypto.randomUUID() };
+        if (!activeVehicle) {
+            showNotification("Seleziona prima un veicolo attivo nel Garage.", "warning");
+            return;
+        }
+        const newRecord = { ...record, vehicleId: activeVehicle.id, id: crypto.randomUUID() };
         try {
             await upsertDoc(`users/${userId}/maintenance`, newRecord.id, { id: newRecord.id, userId, data: newRecord });
             showNotification("Intervento registrato.");
@@ -180,9 +195,14 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
     },
 
     addReminder: async (r) => {
+        const { activeVehicle } = useGarageStore.getState();
         const userId = currentUid();
         if (!userId) return;
-        const newReminder = { ...r, id: crypto.randomUUID() };
+        if (!activeVehicle) {
+            useUIStore.getState().showNotification("Seleziona prima un veicolo attivo nel Garage.", "warning");
+            return;
+        }
+        const newReminder = { ...r, vehicleId: activeVehicle.id, id: crypto.randomUUID() };
         try {
             await upsertDoc(`users/${userId}/reminders`, newReminder.id, { id: newReminder.id, userId, data: newReminder });
         } catch (e: any) {
@@ -258,8 +278,9 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
     },
 
     downloadMaintenanceLogPdf: () => {
-        const { maintenanceLog } = get();
         const { activeVehicle } = useGarageStore.getState();
+        // Il libretto è intestato al veicolo attivo: solo i suoi interventi.
+        const maintenanceLog = get().maintenanceLog.filter(r => belongsToVehicle(r, activeVehicle?.id));
         if (maintenanceLog.length === 0) {
             useUIStore.getState().showNotification("Nessun intervento registrato da esportare.", "warning");
             return;
@@ -311,5 +332,7 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
                 useUIStore.getState().setLoading('isGeneratingMaintenancePdf', false);
             }
         }, 100);
-    }
+    },
+
+    reset: () => set({ ...initialMechanicState, draft: { ...initialMechanicState.draft } }),
 }));

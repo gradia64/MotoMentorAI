@@ -49,6 +49,14 @@
       "electron/**/*",
       "package.json"
     ],
+    "fileAssociations": [
+      {
+        "ext": "mmt.json",
+        "name": "Viaggio MotoMentor",
+        "description": "Viaggio condiviso MotoMentor AI",
+        "mimeType": "application/x-motomentor-trip"
+      }
+    ],
     "linux": {
       "target": [
         "deb",

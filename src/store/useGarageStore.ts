@@ -31,18 +31,28 @@ interface GarageState {
     setActiveVehicle: (id: string) => void;
     calculateAlerts: () => void;
     handleGenerateSpecs: (model: string, year: string) => Promise<any>;
+    reset: () => void;
 }
 
 // UID della sessione locale corrente (unica fonte di verita': lo store auth).
 const currentUid = (): string | undefined => useAuthStore.getState().user?.id;
 
+// Il veicolo attivo è ricordato per utente: con una chiave unica un altro
+// utente dello stesso PC erediterebbe la selezione.
+const activeVehicleKey = (userId: string) => `motomentor_active_vehicle_${userId}`;
+const readActiveVehId = (userId: string): string | null => {
+    try { return localStorage.getItem(activeVehicleKey(userId)); } catch { return null; }
+};
+const emptyGarage = { garageVehicles: [], activeVehId: null, activeVehicle: null, deadlineAlerts: [] };
+
 export const useGarageStore = create<GarageState>((set, get) => ({
     garageVehicles: [],
-    activeVehId: (typeof window !== 'undefined' ? localStorage.getItem('motomentor_active_vehicle') : null),
+    activeVehId: null,
     activeVehicle: null,
     deadlineAlerts: [],
 
     initGarage: (userId) => {
+        set({ ...emptyGarage, activeVehId: readActiveVehId(userId) });
         // Semantica identica a onSnapshot: caricamento iniziale + aggiornamento
         // ad ogni write sulla collection (il main invia 'db:changed').
         const unsub = subscribeCollection<GarageVehicle>(`users/${userId}/vehicles`, (vehicles) => {
@@ -137,7 +147,7 @@ export const useGarageStore = create<GarageState>((set, get) => ({
             await removeDoc(`users/${userId}/vehicles`, id);
             if (get().activeVehId === id) {
                 set({ activeVehId: null, activeVehicle: null });
-                localStorage.removeItem('motomentor_active_vehicle');
+                localStorage.removeItem(activeVehicleKey(userId));
             }
             showNotification("Veicolo rimosso.");
         } catch (e: any) {
@@ -148,7 +158,8 @@ export const useGarageStore = create<GarageState>((set, get) => ({
     setActiveVehicle: (id) => {
         const { showNotification } = useUIStore.getState();
         set({ activeVehId: id });
-        localStorage.setItem('motomentor_active_vehicle', id);
+        const userId = currentUid();
+        if (userId) localStorage.setItem(activeVehicleKey(userId), id);
         const active = get().garageVehicles.find(v => v.id === id) || null;
         set({ activeVehicle: active });
         showNotification("Moto selezionata come attiva!");
@@ -162,5 +173,7 @@ export const useGarageStore = create<GarageState>((set, get) => ({
             showNotification("Errore ricerca dati tecnici.", "error");
             return null;
         }
-    }
+    },
+
+    reset: () => set(emptyGarage),
 }));

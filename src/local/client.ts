@@ -11,9 +11,25 @@ function bridge(): LocalDBBridge {
   return b;
 }
 
+// Electron antepone ai messaggi di errore dell'IPC un prefisso tecnico
+// ("Error invoking remote method 'db:login': Error: ..."): lo si rimuove
+// perché i messaggi del main sono pensati per essere mostrati all'utente.
+const IPC_ERROR_PREFIX = /^Error invoking remote method '[^']*':\s*(?:[A-Za-z]*Error:\s*)?/;
+
+async function call<T>(promise: Promise<T>): Promise<T> {
+    try {
+        return await promise;
+    } catch (e: any) {
+        const message = e instanceof Error ? e.message : String(e);
+        const cleaned = message.replace(IPC_ERROR_PREFIX, '');
+        if (cleaned === message) throw e;
+        throw new Error(cleaned);
+    }
+}
+
 // Inizializza il DB e carica la chiave Gemini dal secret locale nel window (per geminiService).
 export async function initLocalDB(): Promise<void> {
-  await bridge().open();
+  await call(bridge().open());
   try {
     const key = await bridge().getGeminiKey();
     if (key) window.GEMINI_API_KEY = key;
@@ -23,37 +39,37 @@ export async function initLocalDB(): Promise<void> {
 }
 
 // --- Auth ---
-export const getSession = (): Promise<LocalSession | null> => bridge().session();
+export const getSession = (): Promise<LocalSession | null> => call(bridge().session());
 
 // Da chiamare dopo aver registrato i listener (onOpenSharedTrip): sblocca la
 // consegna di eventi accodati dal main durante il caricamento del renderer.
 export const signalRendererReady = (): void => bridge().signalReady();
-export const registerLocal = (username: string, password: string) => bridge().register(username, password);
-export const loginLocal = (username: string, password: string) => bridge().login(username, password);
-export const logoutLocal = (): Promise<boolean> => bridge().logout();
+export const registerLocal = (username: string, password: string) => call(bridge().register(username, password));
+export const loginLocal = (username: string, password: string) => call(bridge().login(username, password));
+export const logoutLocal = (): Promise<boolean> => call(bridge().logout());
 
 // --- Collection (semantica Firestore) ---
 export const subscribeCollection = <T = any>(path: string, cb: (items: T[]) => void): (() => void) =>
   bridge().subscribe<T>(path, cb);
 
 export const upsertDoc = <T = any>(path: string, id: string, data: T): Promise<boolean> =>
-  bridge().upsert<T>(path, id, data);
+  call(bridge().upsert<T>(path, id, data));
 
 export const removeDoc = (path: string, id: string): Promise<boolean> =>
-  bridge().delete(path, id);
+  call(bridge().delete(path, id));
 
-export const listCollection = <T = any>(path: string): Promise<T[]> => bridge().list<T>(path);
+export const listCollection = <T = any>(path: string): Promise<T[]> => call(bridge().list<T>(path));
 
 // --- Gemini ---
-export const getGeminiKey = (): Promise<string> => bridge().getGeminiKey();
-export const setGeminiKey = (key: string): Promise<boolean> => bridge().setGeminiKey(key);
+export const getGeminiKey = (): Promise<string> => call(bridge().getGeminiKey());
+export const setGeminiKey = (key: string): Promise<boolean> => call(bridge().setGeminiKey(key));
 
 // --- Condivisione viaggi via file locale ---
 export const saveSharedTripFile = (trip: AppSharedTrip): Promise<boolean> =>
-  bridge().saveSharedTrip(trip as SharedTrip);
+  call(bridge().saveSharedTrip(trip as SharedTrip));
 
 export const openSharedTripFile = (): Promise<AppSharedTrip> =>
-  bridge().openSharedTrip() as Promise<AppSharedTrip>;
+  call(bridge().openSharedTrip()) as Promise<AppSharedTrip>;
 
 export const onOpenSharedTrip = (cb: (trip: AppSharedTrip) => void): (() => void) =>
   bridge().onOpenSharedTrip((trip) => cb(trip as AppSharedTrip));

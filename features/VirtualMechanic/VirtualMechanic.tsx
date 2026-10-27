@@ -7,7 +7,7 @@ import DiagnosisHistoryModal from './DiagnosisHistoryModal';
 
 // Stores
 import { useGarageStore } from '../../src/store/useGarageStore';
-import { useMechanicStore } from '../../src/store/useMechanicStore';
+import { useMechanicStore, belongsToVehicle } from '../../src/store/useMechanicStore';
 import { useTripStore } from '../../src/store/useTripStore';
 import { useUIStore } from '../../src/store/useUIStore';
 
@@ -84,6 +84,8 @@ const VirtualMechanic: React.FC = () => {
         }
     };
     
+    const vehicleLog = maintenanceLog.filter(r => belongsToVehicle(r, activeVehicle?.id));
+    const vehicleReminders = reminders.filter(r => belongsToVehicle(r, activeVehicle?.id));
     const vehicleDiagnoses = activeVehicle ? savedDiagnoses.filter((d: any) => d.vehicleId === activeVehicle.id) : [];
     
     // Determine the loading state based on the current mode
@@ -114,17 +116,24 @@ const VirtualMechanic: React.FC = () => {
         </div>
 
         {mechanicMode === 'workshop' ? (
-            <MaintenanceLog 
-                log={maintenanceLog} 
+            <>
+            {!activeVehicle && (
+                 <div className="bg-yellow-500/20 text-yellow-300 p-3 rounded-md mb-4 text-center">
+                    Interventi e promemoria sono legati al veicolo: seleziona un veicolo attivo nel <strong>Garage</strong>.
+                </div>
+            )}
+            <MaintenanceLog
+                log={vehicleLog} 
                 onAdd={addMaintenanceRecord} 
                 onDelete={deleteMaintenanceRecord}
-                reminders={reminders}
+                reminders={vehicleReminders}
                 onAddReminder={addReminder}
                 onDeleteReminder={deleteReminder}
                 activeVehicle={activeVehicle}
                 onDownloadPdf={downloadMaintenanceLogPdf}
                 isDownloadingPdf={isGeneratingMaintenancePdf}
             />
+            </>
         ) : (
             <>
             {/* Warning for no active vehicle (applies to both diagnose and maintenance) */}

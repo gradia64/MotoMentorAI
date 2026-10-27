@@ -22,6 +22,7 @@ interface ChatState {
     saveCurrentChat: () => Promise<void>;
     loadChatHistory: (id: string) => void;
     deleteSavedChat: (id: string) => Promise<void>;
+    reset: () => void;
 }
 
 // Formato documento: { id, userId, data } — identico a quanto faceva Firestore.
@@ -96,7 +97,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     try {
                         const directResponse = await sendDirectChatMessage(activeVehicle, historyBeforeMessage, message);
                         if (directResponse) {
-                            set({ chatHistory: [...updatedHistory, { role: 'model', parts: [{ text: directResponse }] }] });
+                            // La sessione non conosce questo scambio: azzerandola, il
+                            // prossimo messaggio la ricrea dallo storico completo.
+                            set({
+                                chatHistory: [...updatedHistory, { role: 'model', parts: [{ text: directResponse }] }],
+                                chatSession: null,
+                            });
                             return true;
                         }
                     } catch (directErr: any) {
@@ -183,5 +189,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         } catch (e: any) {
             showNotification(handleDataError(e, OperationType.DELETE, `users/${userId}/chats/${id}`), "error");
         }
-    }
+    },
+
+    reset: () => set({ savedChats: [], activeChatId: null, chatSession: null, chatHistory: [] }),
 }));

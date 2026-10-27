@@ -12,6 +12,7 @@ import { dirname, join } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 let db = null;
+let dbPath = null;
 let currentUid = null;
 
 const SCHEMA = `
@@ -41,15 +42,20 @@ function getDb() {
 }
 
 // Apre (o crea) il database alla path data. Se data è ':memory:' usa un DB volatile.
+// Idempotente sulla stessa path: un reload del renderer richiama db:open e non
+// deve né lasciare aperto un secondo handle né azzerare la sessione.
 export function openDB(dataPath) {
+  if (db && dbPath === dataPath && dataPath !== ':memory:') return true;
+  closeDB();
   db = new DatabaseSync(dataPath);
   db.exec(SCHEMA);
+  dbPath = dataPath;
   currentUid = null;
   return true;
 }
 
 export function closeDB() {
-  if (db) { db.close(); db = null; currentUid = null; }
+  if (db) { db.close(); db = null; dbPath = null; currentUid = null; }
   return true;
 }
 
@@ -142,20 +148,28 @@ export function upsertDoc(path, id, data) {
   const uid = requireAuth();
   assertPathOwner(uid, path);
   const now = new Date().toISOString();
-  getDb()
+  // Su conflitto aggiorna solo se il documento è dell'utente: nei path globali
+  // (sharedTrips) un altro utente non deve poterne sovrascrivere il contenuto.
+  const { changes } = getDb()
     .prepare(
       `INSERT INTO docs (path, id, user_id, data, updated_at)
        VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(path, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`
+       ON CONFLICT(path, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
+       WHERE docs.user_id = excluded.user_id`
     )
     .run(path, id, uid, JSON.stringify(data ?? {}), now);
+  if (changes === 0) throw new Error('Accesso negato: documento di un altro utente.');
   return true;
 }
 
 export function deleteDoc(path, id) {
   const uid = requireAuth();
   assertPathOwner(uid, path);
-  getDb().prepare('DELETE FROM docs WHERE path = ? AND id = ? AND user_id = ?').run(path, id, uid);
+  const { changes } = getDb().prepare('DELETE FROM docs WHERE path = ? AND id = ? AND user_id = ?').run(path, id, uid);
+  if (changes === 0) {
+    const exists = getDb().prepare('SELECT 1 FROM docs WHERE path = ? AND id = ?').get(path, id);
+    if (exists) throw new Error('Accesso negato: documento di un altro utente.');
+  }
   return true;
 }
 

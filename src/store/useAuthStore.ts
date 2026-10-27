@@ -92,9 +92,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     logout: async () => {
         try {
             await logoutLocal();
+            // Gli store dei dati vengono svuotati da App al cambio utente.
             set({ user: null, isAuthenticated: false });
-            localStorage.removeItem('motomentor_active_vehicle');
             ui().setMode(AiMode.Dashboard);
+            ui().setError(null);
             ui().showNotification('Sessione chiusa.');
         } catch (error: any) {
             ui().showNotification(error.message, 'error');

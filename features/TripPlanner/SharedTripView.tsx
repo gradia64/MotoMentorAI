@@ -48,7 +48,9 @@ const SharedTripView: React.FC<SharedTripViewProps> = ({ id, trip, onBack }) => 
                 return;
             }
             const data = await getSharedTrip(id);
-            if (!data) {
+            if (data) {
+                setObj(data);
+            } else {
                 setError("Viaggio non trovato o non più disponibile.");
             }
             setLoading(false);

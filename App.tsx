@@ -18,6 +18,7 @@ import { useTripStore } from './src/store/useTripStore';
 import { useMechanicStore } from './src/store/useMechanicStore';
 import { useChatStore } from './src/store/useChatStore';
 import { onOpenSharedTrip, signalRendererReady } from './src/local/client';
+import { normalizeItinerary } from './src/utils/itinerary';
 
 // --- Lazy Loading of Feature Components ---
 const TripPlanner = lazy(() => import('./features/TripPlanner/TripPlanner'));
@@ -81,7 +82,18 @@ const AppContent: React.FC = () => {
         let unsubOpenSharedTrip: (() => void) | undefined;
         try {
             unsubOpenSharedTrip = onOpenSharedTrip((trip) => {
-                setSharedTripObject(trip);
+                // Il file arriva dall'esterno: si normalizza prima di mostrarlo.
+                const itinerary = normalizeItinerary(trip?.itinerary);
+                if (!itinerary) {
+                    useUIStore.getState().showNotification('Il file non contiene un viaggio MotoMentor valido.', 'error');
+                    return;
+                }
+                setSharedTripObject({
+                    ...trip,
+                    tripTitle: String(trip.tripTitle || itinerary.tripTitle),
+                    ownerName: String(trip.ownerName || 'Sconosciuto'),
+                    itinerary,
+                });
                 setSharedTripId(null);
             });
             // Ora che i listener sono attivi, il main può consegnare eventuali
@@ -111,6 +123,12 @@ const AppContent: React.FC = () => {
                 unsubTrips();
                 unsubMechanic();
                 unsubChats();
+                // Cambio utente o logout: i dati del profilo precedente non
+                // devono restare in memoria per il prossimo utente.
+                useGarageStore.getState().reset();
+                useTripStore.getState().reset();
+                useMechanicStore.getState().reset();
+                useChatStore.getState().reset();
             };
         }
     }, [user, isAuthenticated, initGarage, initTrips, initMechanic, initChats]);

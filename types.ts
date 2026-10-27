@@ -18,6 +18,9 @@ export enum MaintenanceType {
 
 export interface MaintenanceRecord {
     id: string;
+    // Veicolo a cui si riferisce l'intervento. Assente nei record creati prima
+    // dell'introduzione del campo: quelli restano visibili per ogni veicolo.
+    vehicleId?: string;
     date: string;
     kilometers: number;
     type: MaintenanceType;
@@ -27,6 +30,8 @@ export interface MaintenanceRecord {
 
 export interface MaintenanceReminder {
     id: string;
+    vehicleId?: string; // vedi MaintenanceRecord.vehicleId
+
     description: string;
     targetKilometers: number; // Stored as a number
 }
