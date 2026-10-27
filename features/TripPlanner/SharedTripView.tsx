@@ -17,7 +17,7 @@ import WeatherIcon from '../../components/WeatherIcon';
 import InfoBlock from '../../components/InfoBlock';
 import { downloadFile, generateGpxFile } from '../../src/utils/mapsHelpers';
 import ActionButton from '../../components/ActionButton';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 interface SharedTripViewProps {
     // Id del viaggio condiviso salvato localmente (apertura da archivio).

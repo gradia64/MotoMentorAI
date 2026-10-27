@@ -45,7 +45,9 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
         } else {
             setKilometers('');
         }
-    }, [activeVehicle]);
+        // Dipendenza sull'id (non sul riferimento): ogni write sulla collection
+        // vehicles crea un nuovo oggetto e non deve sovrascrivere il campo km.
+    }, [activeVehicle?.id]);
 
     // State for Sorting
     const [sortConfig, setSortConfig] = useState<{ key: 'date' | 'cost' | 'kilometers'; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });

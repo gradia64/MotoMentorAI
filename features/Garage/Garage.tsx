@@ -9,7 +9,7 @@ import InputField from '../../components/InputField';
 import { useGarageStore } from '../../src/store/useGarageStore';
 import { useUIStore } from '../../src/store/useUIStore';
 
-import { useEscapeKey } from '../../src/utils/hooks';
+import { useEscapeKey, parseLocalDate } from '../../src/utils/hooks';
 import Tooltip from '../../components/Tooltip';
 
 // Helper to convert file to base64
@@ -26,7 +26,8 @@ const fileToBase64 = (file: File): Promise<string> => {
 const getDeadlineStatus = (dateString?: string) => {
     if (!dateString) return 'none';
     const today = new Date();
-    const expiry = new Date(dateString);
+    // Le scadenze sono date "solo giorno": vanno parse come locali.
+    const expiry = parseLocalDate(dateString) ?? new Date(dateString);
     const diffTime = expiry.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -54,7 +55,7 @@ const DeadlineBadge: React.FC<{ label: string; date?: string }> = ({ label, date
     return (
         <div className={`text-xs px-2 py-1 rounded-full flex items-center gap-1.5 ${colorClass}`}>
             {icon}
-            <span>{label}: {new Date(date).toLocaleDateString('it-IT')}</span>
+            <span>{label}: {parseLocalDate(date)?.toLocaleDateString('it-IT') ?? date}</span>
         </div>
     );
 };
@@ -142,9 +143,14 @@ const EditVehicleModal: React.FC<{
                 if (e.target) e.target.value = '';
                 return;
             }
-            const base64 = await fileToBase64(file);
-            setFormData(prev => ({ ...prev, photo: base64 }));
-            setPhotoPreview(base64);
+            try {
+                const base64 = await fileToBase64(file);
+                setFormData(prev => ({ ...prev, photo: base64 }));
+                setPhotoPreview(base64);
+            } catch (err) {
+                console.error('Errore lettura foto:', err);
+                useUIStore.getState().showNotification("Errore durante la lettura dell'immagine.", "error");
+            }
         }
     };
     

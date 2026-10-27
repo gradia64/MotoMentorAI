@@ -69,32 +69,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
     },
 
+    // Gli errori di register/login vengono rilanciati al chiamante (Login):
+    // è il form a mostrarli inline, senza doppie notifiche.
     register: async (username, pass) => {
-        try {
-            const session = await registerLocal(username, pass);
-            set({
-                user: { id: session.uid, username: session.username },
-                isAuthenticated: true,
-            });
-            ui().showNotification(`Benvenuto, ${session.username}!`);
-        } catch (error: any) {
-            ui().showNotification(error.message || 'Errore di registrazione', 'error');
-            throw error;
-        }
+        const session = await registerLocal(username, pass);
+        set({
+            user: { id: session.uid, username: session.username },
+            isAuthenticated: true,
+        });
+        ui().showNotification(`Benvenuto, ${session.username}!`);
     },
 
     login: async (username, pass) => {
-        try {
-            const session = await loginLocal(username, pass);
-            set({
-                user: { id: session.uid, username: session.username },
-                isAuthenticated: true,
-            });
-            ui().showNotification(`Accesso completato. Ciao, ${session.username}!`);
-        } catch (error: any) {
-            ui().showNotification(error.message || 'Errore di accesso', 'error');
-            throw error;
-        }
+        const session = await loginLocal(username, pass);
+        set({
+            user: { id: session.uid, username: session.username },
+            isAuthenticated: true,
+        });
+        ui().showNotification(`Accesso completato. Ciao, ${session.username}!`);
     },
 
     logout: async () => {

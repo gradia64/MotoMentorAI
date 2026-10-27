@@ -5,6 +5,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 const api = {
   // --- Sessione / auth ---
   open: () => ipcRenderer.invoke('db:open'),
+  // Il renderer chiama signalReady quando ha registrato i listener:
+  // il main puo' consegnare eventi accodati prima del caricamento.
+  signalReady: () => ipcRenderer.send('app:ready'),
   close: () => ipcRenderer.invoke('db:close'),
   session: () => ipcRenderer.invoke('db:session'),
   register: (username, password) => ipcRenderer.invoke('db:register', username, password),

@@ -19,6 +19,8 @@ import SegmentNavigator from './SegmentNavigator';
 import Tooltip from '../../components/Tooltip';
 
 // --- CONSTANTS ---
+const MAX_MAP_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB, come promesso dalla UI
+
 const TOURS = [
     "Tour della Scozia", 
     "Avventura in Marocco", 
@@ -158,19 +160,23 @@ const TripPlanner: React.FC = () => {
             setImagePreviews([]);
             return;
         }
-        
+
+        let cancelled = false;
         const loadPreviews = async () => {
             const previews = await Promise.all(mapImages.map((file: File) => {
                 return new Promise<string>((resolve) => {
                     const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.onerror = () => resolve('');
+                    reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : '');
                     reader.readAsDataURL(file);
                 });
             }));
-            setImagePreviews(previews);
+            // Cambi rapidi a mapImages non devono sovrascrivere anteprime più recenti.
+            if (!cancelled) setImagePreviews(previews.filter(Boolean));
         };
-        
+
         loadPreviews();
+        return () => { cancelled = true; };
     }, [mapImages]);
 
     const setDraftValue = (field: string, value: any) => {
@@ -180,7 +186,7 @@ const TripPlanner: React.FC = () => {
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
         e.preventDefault();
         let files: FileList | null = null;
-        
+
         if ('files' in e.target && e.target.files) {
             files = e.target.files;
         } else if ('dataTransfer' in e && e.dataTransfer.files) {
@@ -188,8 +194,17 @@ const TripPlanner: React.FC = () => {
         }
 
         if (files && files.length > 0) {
-            const newFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
-            setDraftValue('mapImages', [...mapImages, ...newFiles]);
+            const oversized = Array.from(files).filter(file => file.type.startsWith('image/') && file.size > MAX_MAP_IMAGE_SIZE);
+            if (oversized.length > 0) {
+                useUIStore.getState().showNotification(
+                    `${oversized.length} immagini superano i 5MB e sono state ignorate.`,
+                    'warning'
+                );
+            }
+            const newFiles = Array.from(files).filter(file => file.type.startsWith('image/') && file.size <= MAX_MAP_IMAGE_SIZE);
+            if (newFiles.length > 0) {
+                setDraftValue('mapImages', [...mapImages, ...newFiles]);
+            }
         }
     };
 
@@ -453,19 +468,16 @@ const TripPlanner: React.FC = () => {
                                     <CheckIcon className="w-5 h-5 text-white" />
                                 </div>
                                 <div>
-                                    <p className="text-green-400 font-bold">Viaggio Condiviso!</p>
-                                    <p className="text-green-500/70 text-xs">Il link pubblico è stato copiato negli appunti.</p>
+                                    <p className="text-green-400 font-bold">Viaggio esportato!</p>
+                                    <p className="text-green-500/70 text-xs">File .mmt.json salvato: condividilo e apribile con "File → Apri viaggio condiviso…".</p>
                                 </div>
                             </div>
-                            <div className="flex items-center bg-gray-900/50 p-2 rounded-xl border border-white/5 w-full sm:w-auto">
-                                <code className="text-xs text-blue-300 truncate max-w-[200px]">{window.location.origin}/shared/{recentShareId}</code>
-                                <button 
-                                    onClick={() => setRecentShareId(null)}
-                                    className="ml-2 text-white hover:text-green-400 transition-colors"
-                                >
-                                    Chiudi
-                                </button>
-                            </div>
+                            <button
+                                onClick={() => setRecentShareId(null)}
+                                className="text-white hover:text-green-400 transition-colors"
+                            >
+                                Chiudi
+                            </button>
                         </div>
                     )}
                     <div id="itinerary-content">
@@ -476,7 +488,7 @@ const TripPlanner: React.FC = () => {
                             </div>
                             <div className="flex gap-2 items-center flex-wrap self-start">
                                 {notification?.message?.toLowerCase().includes('salvato') && <span className="text-green-400 text-sm animate-pulse mr-2">{notification.message}</span>}
-                                <Tooltip text="Condividi questo itinerario con altri tramite un link pubblico">
+                                <Tooltip text="Esporta questo itinerario come file .mmt.json da condividere (niente link cloud)">
                                     <ActionButton onClick={handleShare} loading={isSharing} className="bg-purple-600 hover:bg-purple-500">
                                         <ShareIcon className="w-5 h-5"/> Condividi
                                     </ActionButton>

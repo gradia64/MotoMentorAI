@@ -1,32 +1,4 @@
-import React, { useState, useEffect } from 'react';
-
-// A simple hook to manage state with localStorage persistence.
-export function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      console.error(`Error reading localStorage key “${key}”:`, error);
-      return initialValue;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      // Prevents overwriting stored value with initial value on first render if value exists
-      const item = window.localStorage.getItem(key);
-      if (item !== JSON.stringify(value)) {
-        window.localStorage.setItem(key, JSON.stringify(value));
-      }
-    } catch (error) {
-      console.error(`Error setting localStorage key “${key}”:`, error);
-    }
-  }, [key, value]);
-
-  return [value, setValue];
-}
-
+import { useEffect } from 'react';
 
 // --- Reusable Hook for Modal Accessibility ---
 // This hook centralizes the logic for closing a modal when the 'Escape' key is pressed.
@@ -48,4 +20,16 @@ export const useEscapeKey = (callback: () => void, isActive: boolean = true) => 
             document.removeEventListener('keydown', handleKeyDown);
         };
     }, [callback, isActive]);
+};
+
+// Parsa una data "solo giorno" ('YYYY-MM-DD') come data locale: new Date(string)
+// userebbe la mezzanotte UTC, spostando la giornata nei fusi non-UTC.
+export const parseLocalDate = (value?: string | null): Date | null => {
+    if (!value) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+    if (!m) {
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : d;
+    }
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 };

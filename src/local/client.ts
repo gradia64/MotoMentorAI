@@ -24,6 +24,10 @@ export async function initLocalDB(): Promise<void> {
 
 // --- Auth ---
 export const getSession = (): Promise<LocalSession | null> => bridge().session();
+
+// Da chiamare dopo aver registrato i listener (onOpenSharedTrip): sblocca la
+// consegna di eventi accodati dal main durante il caricamento del renderer.
+export const signalRendererReady = (): void => bridge().signalReady();
 export const registerLocal = (username: string, password: string) => bridge().register(username, password);
 export const loginLocal = (username: string, password: string) => bridge().login(username, password);
 export const logoutLocal = (): Promise<boolean> => bridge().logout();

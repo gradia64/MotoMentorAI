@@ -28,6 +28,8 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ isOpen, onClose, onSucc
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        // Resetta l'input: riselezionare lo stesso file deve riattivare onChange.
+        e.target.value = '';
 
         // Preview
         const reader = new FileReader();

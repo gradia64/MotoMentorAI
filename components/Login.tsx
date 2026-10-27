@@ -15,6 +15,15 @@ export const Login: React.FC = () => {
     const handleEmailAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        // Validazione client: stessi minimi imposti dal main process.
+        if (username.trim().length < 3) {
+            setError('Il nome utente deve avere almeno 3 caratteri.');
+            return;
+        }
+        if (password.length < 6) {
+            setError('La password deve avere almeno 6 caratteri.');
+            return;
+        }
         setLoading(true);
         try {
             if (isRegistering) {
@@ -61,7 +70,7 @@ export const Login: React.FC = () => {
                                 <input
                                     type="text"
                                     required
-                                    autoComplete={isRegistering ? 'username' : 'username'}
+                                    autoComplete="username"
                                     value={username}
                                     onChange={(e) => setUsername(e.target.value)}
                                     className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"

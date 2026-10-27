@@ -6,6 +6,7 @@ import { useUIStore } from './useUIStore';
 import { useAuthStore } from './useAuthStore';
 import { handleDataError, OperationType } from '../utils/dataErrors';
 import { getVehicleSpecs } from '../../services/geminiService';
+import { parseLocalDate } from '../utils/hooks';
 
 interface DeadlineAlert {
     vehicleId: string;
@@ -74,7 +75,8 @@ export const useGarageStore = create<GarageState>((set, get) => ({
 
             checks.forEach(check => {
                 if (check.date) {
-                    const expiryDate = new Date(check.date);
+                    const expiryDate = parseLocalDate(check.date);
+                    if (!expiryDate) return;
                     expiryDate.setHours(0, 0, 0, 0);
                     const diffTime = expiryDate.getTime() - today.getTime();
                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));

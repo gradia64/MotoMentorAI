@@ -1,5 +1,15 @@
 import { Day, GpxPoint } from '../../types';
 
+// I testi generati dall'IA possono contenere & < > " ': senza escaping il GPX
+// risulterebbe XML invalido e molti navigatori lo rifiuterebbero.
+const escapeXml = (value: unknown): string =>
+    String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+
 // Algoritmo Douglas-Peucker per semplificazione intelligente
 export const simplifyGpxTrack = (points: GpxPoint[], tolerance: number = 0.001): GpxPoint[] => {
     if (points.length <= 2) return points;
@@ -112,11 +122,11 @@ export const generateGpxFile = (day: Day): string => {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="MotoMentor AI" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata>
-    <name>${day.stageTitle}</name>
-    <desc>${day.routeDescription}</desc>
+    <name>${escapeXml(day.stageTitle)}</name>
+    <desc>${escapeXml(day.routeDescription)}</desc>
   </metadata>
   <trk>
-    <name>Giorno ${day.day}: ${day.stageTitle}</name>
+    <name>Giorno ${day.day}: ${escapeXml(day.stageTitle)}</name>
     <type>motorcycle</type>
     <trkseg>
 ${trackPoints}
@@ -139,11 +149,11 @@ ${simplified.map(p => `      <trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>`).joi
     return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="MotoMentor AI" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata>
-    <name>${tripTitle}</name>
+    <name>${escapeXml(tripTitle)}</name>
     <desc>Viaggio in moto di ${days.length} giorni</desc>
   </metadata>
   <trk>
-    <name>${tripTitle}</name>
+    <name>${escapeXml(tripTitle)}</name>
 ${allSegments}
   </trk>
 </gpx>`;
@@ -159,5 +169,6 @@ export const downloadFile = (content: string, filename: string, mimeType: string
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Revocare subito può interrompere download ravvicinati (es. export multiplo GPX).
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
 };

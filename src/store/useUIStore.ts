@@ -54,9 +54,9 @@ export const useUIStore = create<UIState>((set) => ({
     
     showNotification: (message, type = 'success') => {
         set({ notification: { message, type } });
-        setTimeout(() => {
-            set({ notification: null });
-        }, 5000);
+        // L'auto-hide è di competenza del componente Notification (timer unico
+        // che si resetta a ogni nuova notifica): un timer qui durerebbe più
+        // lungo e azzererebbe le notifiche successive in anticipo.
     },
     
     hideNotification: () => set({ notification: null }),

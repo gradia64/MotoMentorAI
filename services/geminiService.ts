@@ -4,6 +4,29 @@ import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceT
 export const PRIMARY_MODEL = 'gemini-3.7-flash';
 export const FALLBACK_MODEL = 'gemini-3.5-flash';
 
+// Errori per cui ha senso riprovare con il modello di fallback: transitori
+// (503/429/overload) o modello non disponibile (404/not found). Per gli altri
+// (es. chiave non valida, safety) il fallback fallirebbe allo stesso modo.
+export const isTransientGeminiError = (e: any): boolean => {
+    const raw = String(e?.message || e || '');
+    return /503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|temporarily unavailable|overload|404|not found/i.test(raw);
+};
+
+// Legge un File e ne restituisce il base64 (senza prefisso data URL).
+const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Errore lettura del file "${file.name}".`));
+    reader.onloadend = () => {
+        const result = reader.result;
+        if (typeof result !== 'string' || !result.includes(',')) {
+            reject(new Error(`Errore lettura del file "${file.name}".`));
+            return;
+        }
+        resolve(result.split(',')[1]);
+    };
+    reader.readAsDataURL(file);
+});
+
 const getApiKey = (): string => {
     let key = '';
     try {
@@ -106,8 +129,9 @@ const apiProxy = async (model: string, contents: any, config?: any) => {
     } catch (e: any) {
         console.error(`Gemini API Error (${model}):`, e);
 
-        // Fallback automatico su FALLBACK_MODEL in caso di 503, 429, 404, not found o overload
-        if (model === PRIMARY_MODEL) {
+        // Fallback automatico su FALLBACK_MODEL solo per errori transitori o
+        // modello non disponibile (503, 429, 404, overload).
+        if (model === PRIMARY_MODEL && isTransientGeminiError(e)) {
             console.warn(`Fallback da ${PRIMARY_MODEL} a ${FALLBACK_MODEL}...`);
             return await apiProxy(FALLBACK_MODEL, contents, config);
         }
@@ -127,9 +151,9 @@ const textApiProxy = async (model: string, contents: any, config?: any) => {
          return response.text || "Nessuna risposta generata.";
     } catch (e: any) {
          console.error(`Gemini Text API Error (${model}):`, e);
-         if (model === PRIMARY_MODEL) {
-            console.warn(`Fallback testo da ${PRIMARY_MODEL} a ${FALLBACK_MODEL}...`);
-            return await textApiProxy(FALLBACK_MODEL, contents, config);
+         if (model === PRIMARY_MODEL && isTransientGeminiError(e)) {
+             console.warn(`Fallback testo da ${PRIMARY_MODEL} a ${FALLBACK_MODEL}...`);
+             return await textApiProxy(FALLBACK_MODEL, contents, config);
          }
          throw e;
     }
@@ -197,11 +221,7 @@ REGOLE JSON: Restituisci esclusivamente l'oggetto JSON richiesto secondo ITINERA
     const parts: any[] = [{ text: prompt }];
     if (mapImages && mapImages.length > 0) {
         for (const img of mapImages) {
-            const base64Data = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-                reader.readAsDataURL(img);
-            });
+            const base64Data = await fileToBase64(img);
             parts.push({ inlineData: { data: base64Data, mimeType: img.type } });
         }
     }
@@ -217,11 +237,7 @@ Esegui un'analisi tecnica dettagliata.`;
     
     const parts: any[] = [{ text: prompt }];
     if (image) {
-        const base64Data = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-            reader.readAsDataURL(image);
-        });
+        const base64Data = await fileToBase64(image);
         parts.push({ inlineData: { data: base64Data, mimeType: image.type } });
     }
     return await textApiProxy(PRIMARY_MODEL, { parts });
@@ -285,11 +301,7 @@ export const scanReceiptImage = async (image: File): Promise<ScannedReceiptData>
     const prompt = `Analizza questa immagine di uno scontrino o ricevuta di manutenzione moto. Estrai: data, descrizione sintetica dei lavori, costo totale, chilometri (se presenti) e tipo di intervento (Ordinaria, Straordinaria, Eccezionale).`;
     const config = { responseMimeType: "application/json", responseSchema: RECEIPT_SCAN_SCHEMA };
     
-    const base64Data = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.readAsDataURL(image);
-    });
+    const base64Data = await fileToBase64(image);
 
     const response = await apiProxy(PRIMARY_MODEL, { 
         parts: [

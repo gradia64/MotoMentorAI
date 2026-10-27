@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createNavigationSegments, generateGpxFile, downloadFile } from '../../src/utils/mapsHelpers';
 import { Day } from '../../types';
 import { useEscapeKey } from '../../src/utils/hooks';
@@ -12,10 +12,13 @@ interface SegmentNavigatorProps {
 
 export const SegmentNavigator: React.FC<SegmentNavigatorProps> = ({ day, onClose }) => {
     useEscapeKey(onClose);
-    
+
     const points = day.gpxTrack || [];
-    // Fix: The second argument to createNavigationSegments must be an options object.
-    const segments = createNavigationSegments(points, { maxWaypointsPerSegment: 9 });
+    // Douglas-Peucker è O(n²) al peggio: va memoizzato, non ricalcolato a ogni render.
+    const segments = useMemo(
+        () => createNavigationSegments(points, { maxWaypointsPerSegment: 9 }),
+        [points]
+    );
     const [currentSegment, setCurrentSegment] = useState(0);
 
     const handleNavigateSegment = (index: number) => {

@@ -1,7 +1,7 @@
 // Processo principale Electron di MotoMentor AI.
 // Espone al renderer (via IPC) l'intero layer di persistenza locale + la chiave Gemini
 // (secret su file) + la condivisione dei viaggi tramite file .mmt.json.
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session } from 'electron';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -36,10 +36,10 @@ function readGeminiKey() {
 }
 
 function saveGeminiKey(key) {
-  try {
-    const p = getGeminiKeyPath();
-    writeFileSync(p, String(key || '').trim(), { mode: 0o600 });
-  } catch (e) { /* ignore */ }
+  // Senza try/catch: se la scrittura fallisce l'errore arriva al renderer
+  // via IPC e la UI mostra il fallimento invece di un finto successo.
+  const p = getGeminiKeyPath();
+  writeFileSync(p, String(key || '').trim(), { mode: 0o600 });
   return true;
 }
 
@@ -81,9 +81,17 @@ async function openSharedTripDialog() {
   return readSharedTripFile(filePaths[0]);
 }
 
+// Un viaggio condiviso può arrivare prima che il renderer abbia caricato e
+// registrato il listener (es. doppio click su .mmt.json con app chiusa):
+// in quel caso va messo in coda e consegnato al segnale 'app:ready'.
+let pendingSharedTrip = null;
+let rendererReady = false;
+
 function sendSharedTripToRenderer(trip) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
+  if (rendererReady && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('shared-trip:open', trip);
+  } else {
+    pendingSharedTrip = trip;
   }
 }
 
@@ -113,6 +121,25 @@ function registerHandlers() {
 
   ipcMain.handle('config:geminiKey', () => readGeminiKey());
   ipcMain.handle('config:setGeminiKey', (_e, key) => { saveGeminiKey(key); return true; });
+
+  // Il renderer segnala di aver registrato i listener (in particolare
+  // 'shared-trip:open'): consegna l'eventuale viaggio rimasto in coda.
+  ipcMain.on('app:ready', () => {
+    rendererReady = true;
+    if (pendingSharedTrip) {
+      const trip = pendingSharedTrip;
+      pendingSharedTrip = null;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('shared-trip:open', trip);
+      }
+    }
+  });
+
+  // I download del renderer (PDF, GPX) chiedono dove salvare invece di
+  // finire in silenzio nella cartella Download.
+  session.defaultSession.on('will-download', (_event, item) => {
+    item.setSaveDialogOptions({ defaultPath: item.getFilename() });
+  });
 
   // Esporta un viaggio condiviso come file .mmt.json (dialog di salvataggio).
   ipcMain.handle('sharedtrip:save', async (_e, sharedTrip) => {
@@ -203,6 +230,18 @@ function createWindow() {
   } else {
     mainWindow.loadFile(join(__dirname, '../../dist/index.html'));
   }
+
+  // I link esterni (Google Maps) aprono il browser di sistema, non nuove
+  // finestre Electron spoglie. Solo https: per prudenza.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  // Dopo un reload il renderer deve risegnalarsi prima di ricevere eventi.
+  mainWindow.webContents.on('did-start-loading', () => {
+    rendererReady = false;
+  });
 
   mainWindow.on('closed', () => { mainWindow = null; });
 }

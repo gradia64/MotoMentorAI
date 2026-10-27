@@ -28,15 +28,20 @@ const TripDiary: React.FC = () => {
     const [unsavedChanges, setUnsavedChanges] = useState(false);
 
     const activeTrip = tripHistory.find((t: any) => t.id === activeDiaryTripId);
+    // La numerazione dei giorni generata dall'IA non è garantita contigua:
+    // si cerca per numero giorno, non per posizione nell'array.
+    const selectedDaySchedule = activeTrip?.itinerary?.dailySchedule?.find((d: any) => d.day === selectedDay) || null;
 
-    // Effect to update local state when active trip or day changes
+    // Effect to update local state when active trip or day changes.
+    // Dipendenza sull'id (non sul riferimento): ogni write sulla collection
+    // crea nuovi oggetti e non deve azzerare la nota non salvata.
     useEffect(() => {
         if (activeTrip) {
             const entry = activeTrip.diaryEntries?.find((e: any) => e.day === selectedDay);
             setCurrentNote(entry?.content || '');
             setUnsavedChanges(false);
         }
-    }, [activeTrip, selectedDay]);
+    }, [activeTrip?.id, selectedDay]);
 
     const handleTripSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
         setActiveDiaryTrip(e.target.value);
@@ -141,8 +146,8 @@ const TripDiary: React.FC = () => {
                         <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700 flex-grow">
                             <div className="flex justify-between items-center mb-4">
                                 <div>
-                                    <h2 className="text-xl font-bold text-white">Giorno {selectedDay}: {activeTrip.itinerary.dailySchedule[selectedDay - 1].stageTitle}</h2>
-                                    <p className="text-sm text-gray-400 mt-1">{activeTrip.itinerary.dailySchedule[selectedDay - 1].routeDescription}</p>
+                                    <h2 className="text-xl font-bold text-white">Giorno {selectedDay}: {selectedDaySchedule?.stageTitle ?? '—'}</h2>
+                                    <p className="text-sm text-gray-400 mt-1">{selectedDaySchedule?.routeDescription ?? ''}</p>
                                 </div>
                                 {unsavedChanges && <span className="text-xs text-yellow-400 animate-pulse font-semibold">Modifiche non salvate</span>}
                             </div>

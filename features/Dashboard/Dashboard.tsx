@@ -17,13 +17,16 @@ import { motion } from 'motion/react';
 import { useUIStore } from '../../src/store/useUIStore';
 import { useGarageStore } from '../../src/store/useGarageStore';
 import { useTripStore } from '../../src/store/useTripStore';
+import { parseLocalDate } from '../../src/utils/hooks';
 
 const Dashboard: React.FC = () => {
     const { setMode } = useUIStore();
     const { activeVehicle, deadlineAlerts } = useGarageStore();
     const { tripHistory } = useTripStore();
 
-    const lastTrip = tripHistory.length > 0 ? tripHistory[0] : null;
+    // La collection è ordinata per updated_at crescente: l'ultimo elemento è
+    // il viaggio aggiornato più di recente.
+    const lastTrip = tripHistory.length > 0 ? tripHistory[tripHistory.length - 1] : null;
 
     return (
         <div className="space-y-10 animate-fade-in max-w-6xl mx-auto">
@@ -53,8 +56,8 @@ const Dashboard: React.FC = () => {
                                     <div className="w-px h-8 bg-white/10 hidden sm:block"></div>
                                     <div className="flex flex-col">
                                         <span className="text-[9px] uppercase text-gray-500 font-sans font-bold tracking-wider">Prossima Revisione</span>
-                                        <span className={`text-lg ${deadlineAlerts.some((a: any) => a.type === 'Revisione') ? 'text-red-400' : 'text-emerald-400'}`}>
-                                            {activeVehicle.inspectionExpiry ? new Date(activeVehicle.inspectionExpiry).toLocaleDateString('it-IT') : 'N/D'}
+                                        <span className={`text-lg ${deadlineAlerts.some((a: any) => a.type === 'Revisione' && a.vehicleId === activeVehicle.id) ? 'text-red-400' : 'text-emerald-400'}`}>
+                                            {parseLocalDate(activeVehicle.inspectionExpiry)?.toLocaleDateString('it-IT') ?? 'N/D'}
                                         </span>
                                     </div>
                                 </div>
@@ -86,8 +89,6 @@ const Dashboard: React.FC = () => {
                         </motion.div>
                     )}
                 </div>
-                {/* Hardware Grid Aesthetic */}
-                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none"></div>
             </section>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

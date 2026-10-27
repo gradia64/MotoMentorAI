@@ -17,7 +17,7 @@ import { useGarageStore } from './src/store/useGarageStore';
 import { useTripStore } from './src/store/useTripStore';
 import { useMechanicStore } from './src/store/useMechanicStore';
 import { useChatStore } from './src/store/useChatStore';
-import { onOpenSharedTrip } from './src/local/client';
+import { onOpenSharedTrip, signalRendererReady } from './src/local/client';
 
 // --- Lazy Loading of Feature Components ---
 const TripPlanner = lazy(() => import('./features/TripPlanner/TripPlanner'));
@@ -55,7 +55,13 @@ const AppContent: React.FC = () => {
             setFatalError(`Runtime Error: ${event.message}`);
         };
         const handleRejection = (event: PromiseRejectionEvent) => {
-            setFatalError(`Promise Error: ${event.reason?.message || event.reason}`);
+            // Una rejection async non gestita non deve bloccare l'intera app:
+            // si notifica e si continua.
+            console.error('Unhandled promise rejection:', event.reason);
+            useUIStore.getState().showNotification(
+                `Errore interno: ${event.reason?.message || event.reason || 'operazione non riuscita'}`,
+                'error'
+            );
         };
 
         window.addEventListener('error', handleError);
@@ -78,6 +84,9 @@ const AppContent: React.FC = () => {
                 setSharedTripObject(trip);
                 setSharedTripId(null);
             });
+            // Ora che i listener sono attivi, il main può consegnare eventuali
+            // viaggio condiviso aperto prima del caricamento del renderer.
+            signalRendererReady();
         } catch (e) {
             // Solo in contesto web (nessun bridge Electron): nessuna azione.
         }

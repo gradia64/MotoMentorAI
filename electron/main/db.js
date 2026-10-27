@@ -117,12 +117,15 @@ function assertPathOwner(uid, path) {
 }
 
 // Lista tutti i documenti di un path (es. "users/{uid}/vehicles").
+// I path globali (sharedTrips) sono visibili a tutti gli utenti: non vanno
+// filtrati per user_id, altrimenti la condivisione tra utenti locali non funziona.
 export function listDocs(path) {
   const uid = requireAuth();
   assertPathOwner(uid, path);
-  const rows = getDb()
-    .prepare('SELECT data FROM docs WHERE path = ? AND user_id = ? ORDER BY updated_at ASC')
-    .all(path, uid);
+  const isShared = path === 'sharedTrips' || path.startsWith('sharedTrips/');
+  const rows = isShared
+    ? getDb().prepare('SELECT data FROM docs WHERE path = ? ORDER BY updated_at ASC').all(path)
+    : getDb().prepare('SELECT data FROM docs WHERE path = ? AND user_id = ? ORDER BY updated_at ASC').all(path, uid);
   return rows.map((r) => JSON.parse(r.data));
 }
 
@@ -143,7 +146,7 @@ export function upsertDoc(path, id, data) {
     .prepare(
       `INSERT INTO docs (path, id, user_id, data, updated_at)
        VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(path, id) DO UPDATE SET user_id = excluded.user_id, data = excluded.data, updated_at = excluded.updated_at`
+       ON CONFLICT(path, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`
     )
     .run(path, id, uid, JSON.stringify(data ?? {}), now);
   return true;

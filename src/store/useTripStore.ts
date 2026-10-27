@@ -247,6 +247,9 @@ export const useTripStore = create<TripState>((set, get) => ({
                         });
                     }
                 );
+            } catch (error) {
+                console.error("PDF generation error:", error);
+                useUIStore.getState().showNotification("Errore durante la generazione del PDF.", "error");
             } finally {
                 useUIStore.getState().setLoading('isGeneratingPdf', false);
             }
@@ -271,6 +274,9 @@ export const useTripStore = create<TripState>((set, get) => ({
                         }
                     });
                 });
+            } catch (error) {
+                console.error("PDF generation error:", error);
+                useUIStore.getState().showNotification("Errore durante la generazione del PDF.", "error");
             } finally {
                 useUIStore.getState().setLoading('isGeneratingPdf', false);
             }
@@ -304,7 +310,9 @@ export const useTripStore = create<TripState>((set, get) => ({
             } else {
                 showNotification("Esportazione annullata.", "warning");
             }
-            return sharedId;
+            // Se l'utente ha annullato il dialog di salvataggio non è stato
+            // creato nessun file: il chiamante non deve mostrare il banner.
+            return saved ? sharedId : null;
         } catch (e: any) {
             showNotification(handleDataError(e, OperationType.WRITE, `sharedTrips/${sharedId}`), "error");
             return null;

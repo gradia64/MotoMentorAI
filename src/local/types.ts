@@ -12,6 +12,7 @@ export interface LocalSession {
 
 export interface LocalDBBridge {
   open(): Promise<boolean>;
+  signalReady(): void;
   close(): Promise<boolean>;
   session(): Promise<LocalSession | null>;
   register(username: string, password: string): Promise<LocalSession>;

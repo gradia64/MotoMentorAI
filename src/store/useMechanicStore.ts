@@ -103,7 +103,8 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
         
         setLoading('isGeneratingChecklist', true);
         try {
-            const lastTrip = itinerary ? { tripTitle: itinerary.tripTitle, dailySchedule: itinerary.dailySchedule } as any : (tripHistory.length > 0 ? tripHistory[0].itinerary : null);
+            // Collection ordinata per updated_at crescente: l'ultimo elemento è il più recente.
+            const lastTrip = itinerary ? { tripTitle: itinerary.tripTitle, dailySchedule: itinerary.dailySchedule } as any : (tripHistory.length > 0 ? tripHistory[tripHistory.length - 1].itinerary : null);
             if (!lastTrip) throw new Error("Pianifica un viaggio prima.");
             const tips = await getMaintenanceTips(lastTrip, activeVehicle!);
             set({ maintenanceTips: tips });
@@ -225,6 +226,9 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
                     addWrappedText("ANALISI IA:", { size: 14, color: [37, 99, 235] });
                     addWrappedText(diagnosis);
                 });
+            } catch (error) {
+                console.error("PDF generation error:", error);
+                useUIStore.getState().showNotification("Errore durante la generazione del PDF.", "error");
             } finally {
                 useUIStore.getState().setLoading('isGeneratingDiagnosisPdf', false);
             }
@@ -244,6 +248,9 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
                     addWrappedText("EQUIPAGGIAMENTO EMERGENZA:", { size: 14, color: [37, 99, 235] });
                     maintenanceTips.emergencyEquipment.forEach((c: any) => addWrappedText(`[ ] ${c}`, { isListItem: true }));
                 });
+            } catch (error) {
+                console.error("PDF generation error:", error);
+                useUIStore.getState().showNotification("Errore durante la generazione del PDF.", "error");
             } finally {
                 useUIStore.getState().setLoading('isGeneratingChecklistPdf', false);
             }

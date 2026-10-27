@@ -6,7 +6,7 @@ import { SavedChat } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useGarageStore } from './useGarageStore';
 import { useAuthStore } from './useAuthStore';
-import { createChatSession, sendDirectChatMessage, formatGeminiError } from '../../services/geminiService';
+import { createChatSession, sendDirectChatMessage, formatGeminiError, isTransientGeminiError } from '../../services/geminiService';
 import { handleDataError, OperationType } from '../utils/dataErrors';
 
 interface ChatState {
@@ -88,16 +88,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 throw new Error("Sessione chat non disponibile.");
             } catch (err: any) {
                 console.warn(`Chat attempt ${attempt} stream failed:`, err);
-                
-                // Fallback trasparente: chiamata diretta standard
-                try {
-                    const directResponse = await sendDirectChatMessage(activeVehicle, historyBeforeMessage, message);
-                    if (directResponse) {
-                        set({ chatHistory: [...updatedHistory, { role: 'model', parts: [{ text: directResponse }] }] });
-                        return true;
+
+                // Fallback trasparente con chiamata diretta solo per errori
+                // transitori o modello non disponibile: per gli altri (es.
+                // chiave non valida) fallirebbe allo stesso modo.
+                if (isTransientGeminiError(err)) {
+                    try {
+                        const directResponse = await sendDirectChatMessage(activeVehicle, historyBeforeMessage, message);
+                        if (directResponse) {
+                            set({ chatHistory: [...updatedHistory, { role: 'model', parts: [{ text: directResponse }] }] });
+                            return true;
+                        }
+                    } catch (directErr: any) {
+                        console.error("Direct fallback failed:", directErr);
                     }
-                } catch (directErr: any) {
-                    console.error("Direct fallback failed:", directErr);
                 }
 
                 const isTransient = 
