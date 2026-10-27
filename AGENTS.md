@@ -11,7 +11,7 @@ crash non gestiti, notifiche, GPX invalidi, scope `sharedTrips`, link esterni,
 fallback AI, date locali, ecc. (dettagli nel messaggio del commit).
 
 **Seconda analisi (2026-10-27)**: corretti 11 problemi di gravità alta/media
-(non ancora committati al momento della scrittura):
+(commit `2594ff5`, pushato su `origin/main`):
 - store svuotati al cambio utente (reset in `App.tsx`), veicolo attivo salvato in
   localStorage **per utente** (`motomentor_active_vehicle_{uid}`);
 - interventi/promemoria con `vehicleId` (i record vecchi senza campo restano visibili
@@ -27,10 +27,12 @@ fallback AI, date locali, ecc. (dettagli nel messaggio del commit).
 - `shareTrip` scrive in `sharedTrips` solo dopo il salvataggio del file;
   `SharedTripView` via `id` ora mostra il viaggio.
 Problemi a bassa priorità ancora aperti: date UTC in `MaintenanceLog`/scanner,
-un dialog per tappa nell'export GPX condiviso, chiave Gemini non riapplicata alla
+chiave Gemini non riapplicata alla
 chat aperta, nessun limite di dimensione per immagini diagnosi/scontrino, note del
 diario perse cambiando viaggio, input immagini mappa non resettato, diagnosi orfane
 dopo l'eliminazione di un veicolo.
+Scelta voluta (non è un bug): l'export GPX del viaggio condiviso salva un file
+per tappa, con un dialog ciascuno, per avere una traccia per ogni giorno di viaggio.
 
 Verifiche correnti:
 - ✅ `tsc --noEmit` → 0 errori; `vite build` OK.
