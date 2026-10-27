@@ -3,13 +3,10 @@
 _Punto di riferimento per riprendere il lavoro dopo un'interruzione di sessione.
 Aggiornato il 2026-10-27._
 
-## Cosa è in corso
-Migrazione dell'app da **Firebase (cloud) a desktop Electron con dati 100% locali**,
-per poi impacchettarla in `.deb` (e AppImage). L'app è una SPA React 18 + Vite + TS
-(pianificazione viaggi, garage, meccanico virtuale, diario, chat) che usava Firestore +
-auth Google + Gemini. Ora: **SQLite locale + auth bcrypt locale + Gemini via chiave
-segreta sul disco**. Tutte le funzionalità sono state mantenute (la condivisione viaggi
-cloud è diventata export/import di file `.mmt.json`).
+## Stato (aggiornato 2026-10-27 — migrazione completata e verificata)
+Migrazione **completata e verificata end-to-end**: l'app gira come desktop Electron con
+dati 100% locali. Smoke-test GUI superato (login, CRUD, Gemini, persistenza dopo riavvio).
+Committata su branch `local-desktop` (commit `d933d31` + follow-up).
 
 ## Stato attuale (2026-10-27)
 - ✅ Migrazione codice completata (5 store, auth, login, settings, Electron main/preload/db).
@@ -18,8 +15,9 @@ cloud è diventata export/import di file `.mmt.json`).
 - ✅ Layer persistenza testato: **13/13** test su `electron/main/db.js`
   (node:sqlite + bcrypt, auth, scope enforcement, sharedTrips).
 - ✅ `.deb` costruito: `release/motomentor-ai_1.0.0_amd64.deb` (~108 MB), validato con `dpkg-deb`.
-- ⏳ **NON committato**: 41 file modificati, ancora sul branch `main` (working tree sporco).
-- ⏳ **NON smoke-testata** la GUI (ambiente headless): login + CRUD + chiamata Gemini da verificare a mano.
+- ✅ **Committato** su branch `local-desktop` (commit `d933d31`).
+- ✅ **Smoke-test GUI superato** (2026-10-27): login, CRUD, chiamata Gemini e
+  persistenza dopo riavvio OK.
 
 ## Come costruire / verificare (comandi)
 ```bash
@@ -84,17 +82,14 @@ target deb+AppImage, icona `build/icons`).
   `service-worker.js` sono già stati cancellati (staged come `D`).
 
 ## Cosa manca / prossimi passi (in ordine)
-1. **Smoke-test GUI** del `.deb` installato: crea utente, aggiungi moto, salva un viaggio,
-   genera una diagnosi, prova la chat (serve chiave Gemini valida da Settings). Verifica che i
-   dati sopravvivano al riavvio (SQLite).
-2. **Commit** dei 41 file su branch dedicato (es. `local-desktop`) — NON committato su `main`.
-3. **Pulizia**: cancellare `firestore.rules` (vestigiale).
-4. **AppImage**: configurato in `package.json` ma non costruito qui (a runtime serve libfuse).
+1. ~~**Smoke-test GUI**~~ ✅ fatto (2026-10-27).
+2. **Commit** dei 41 file su branch dedicato (es. `local-desktop`) — NON committato su `main`. ✅ fatto (commit `d933d31` + follow-up).
+3. (Opzionale) **Pulizia**: cancellare `firestore.rules` (vestigiale, niente più Firestore).
+4. (Opzionale) **AppImage**: configurato ma non costruito qui (a runtime serve libfuse).
    `npm run dist` builda sia deb sia AppImage.
-5. (Opzionale) Fix cosmetico WM_CLASS se il grouping taskbar dà fastidio: workaround diverso da
-   `desktopName` (es. `linux.desktopName` via `app-builder` o `WM_CLASS` esplicito) — solo se serve.
+5. (Opzionale) Fix cosmetico WM_CLASS se il grouping taskbar dà fastidio.
 
 ## Riferimenti
-- Repo: `git@github.com:gradia64/MotoMentorAI.git`, branch corrente `main`.
+- Repo: `git@github.com:gradia64/MotoMentorAI.git`, branch corrente `local-desktop`.
 - Licenza: GPL-3.0 (`LICENSE` presente).
 - Ultimo commit reale prima del lavoro: `dabe99d` "Aggiornamento da AI Studio - 2026-08-14".
