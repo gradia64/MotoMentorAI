@@ -1,6 +1,6 @@
 
 import { create } from 'zustand';
-import { subscribeCollection, upsertDoc, removeDoc } from '../local/client';
+import { subscribeCollection, upsertDoc, removeDoc, listCollection } from '../local/client';
 import { GarageVehicle } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useAuthStore } from './useAuthStore';
@@ -145,6 +145,15 @@ export const useGarageStore = create<GarageState>((set, get) => ({
         if (!userId) return;
         try {
             await removeDoc(`users/${userId}/vehicles`, id);
+            // Diagnosi, interventi e promemoria del veicolo resterebbero orfani:
+            // si eliminano insieme a lui (i record senza vehicleId restano).
+            for (const sub of ['diagnoses', 'maintenance', 'reminders']) {
+                const path = `users/${userId}/${sub}`;
+                const rows = await listCollection<{ id: string; data?: { vehicleId?: string } }>(path);
+                for (const row of rows) {
+                    if (row.data?.vehicleId === id) await removeDoc(path, row.id);
+                }
+            }
             if (get().activeVehId === id) {
                 set({ activeVehId: null, activeVehicle: null });
                 localStorage.removeItem(activeVehicleKey(userId));

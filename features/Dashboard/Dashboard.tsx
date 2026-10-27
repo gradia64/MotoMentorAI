@@ -17,7 +17,7 @@ import { motion } from 'motion/react';
 import { useUIStore } from '../../src/store/useUIStore';
 import { useGarageStore } from '../../src/store/useGarageStore';
 import { useTripStore } from '../../src/store/useTripStore';
-import { parseLocalDate } from '../../src/utils/hooks';
+import { parseLocalDate, formatLocalDate } from '../../src/utils/hooks';
 
 const Dashboard: React.FC = () => {
     const { setMode } = useUIStore();
@@ -193,7 +193,7 @@ const Dashboard: React.FC = () => {
                                         </div>
                                         <div className="bg-white/5 p-3 rounded-xl border border-white/5 group-hover:border-red-500/30 transition-colors">
                                             <p className="text-xs font-bold text-white uppercase tracking-wider">{alert.vehicleName}</p>
-                                            <p className="text-[10px] font-mono text-gray-500 mt-1">{new Date(alert.date).toLocaleDateString('it-IT')}</p>
+                                            <p className="text-[10px] font-mono text-gray-500 mt-1">{formatLocalDate(alert.date)}</p>
                                         </div>
                                     </motion.div>
                                 ))}

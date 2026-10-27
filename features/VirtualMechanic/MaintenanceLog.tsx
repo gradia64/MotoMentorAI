@@ -6,6 +6,7 @@ import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
 import ReceiptScanner from './ReceiptScanner';
 import { ScannedReceiptData } from '../../types';
+import { todayLocalISO, formatLocalDate, localDateTime } from '../../src/utils/hooks';
 
 interface MaintenanceLogProps {
     log: MaintenanceRecord[];
@@ -21,7 +22,7 @@ interface MaintenanceLogProps {
 
 const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, reminders, onAddReminder, onDeleteReminder, activeVehicle, onDownloadPdf, isDownloadingPdf }) => {
     // State for Maintenance Log form
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState(todayLocalISO);
     const [type, setType] = useState<MaintenanceType>(MaintenanceType.Ordinary);
     const [description, setDescription] = useState('');
     const [cost, setCost] = useState('');
@@ -96,8 +97,8 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
                 return sortConfig.direction === 'asc' ? a.kilometers - b.kilometers : b.kilometers - a.kilometers;
             }
             if (sortConfig.key === 'date') {
-                const dateA = new Date(a.date).getTime();
-                const dateB = new Date(b.date).getTime();
+                const dateA = localDateTime(a.date);
+                const dateB = localDateTime(b.date);
                 // Fix: Corrected a typo where 'a.date' (string) was used instead of 'dateA' (number) in the arithmetic operation.
                 return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
             } else { // cost
@@ -223,7 +224,7 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
                             <div key={record.id} className="bg-gray-700/50 p-3 rounded-lg flex items-start justify-between gap-4">
                                 <div className="flex-1">
                                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2">
-                                        <span className="font-bold text-white">{new Date(record.date).toLocaleDateString('it-IT')}</span>
+                                        <span className="font-bold text-white">{formatLocalDate(record.date)}</span>
                                         <span className="text-sm font-medium text-gray-400 border-l border-gray-600 pl-4">{record.kilometers.toLocaleString('it-IT')} km</span>
                                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${getTypeClasses(record.type)}`}>{record.type}</span>
                                     </div>

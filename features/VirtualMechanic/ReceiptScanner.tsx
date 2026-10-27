@@ -7,6 +7,7 @@ import SelectField from '../../components/SelectField';
 import { MaintenanceType, ScannedReceiptData } from '../../types';
 import { useMechanicStore } from '../../src/store/useMechanicStore';
 import { useUIStore } from '../../src/store/useUIStore';
+import { MAX_AI_IMAGES_BYTES, imagesTooLargeMessage } from '../../services/geminiService';
 
 interface ReceiptScannerProps {
     isOpen: boolean;
@@ -30,6 +31,10 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ isOpen, onClose, onSucc
         if (!file) return;
         // Resetta l'input: riselezionare lo stesso file deve riattivare onChange.
         e.target.value = '';
+        if (file.size > MAX_AI_IMAGES_BYTES) {
+            useUIStore.getState().showNotification(imagesTooLargeMessage(), 'warning');
+            return;
+        }
 
         // Preview
         const reader = new FileReader();

@@ -17,6 +17,7 @@ import { createNavigationSegments, generateGpxFile, generateFullTripGpx, downloa
 import { useEscapeKey } from '../../src/utils/hooks';
 import SegmentNavigator from './SegmentNavigator';
 import Tooltip from '../../components/Tooltip';
+import { MAX_AI_IMAGES_BYTES, imagesTooLargeMessage } from '../../services/geminiService';
 
 // --- CONSTANTS ---
 const MAX_MAP_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB, come promesso dalla UI
@@ -202,9 +203,16 @@ const TripPlanner: React.FC = () => {
                 );
             }
             const newFiles = Array.from(files).filter(file => file.type.startsWith('image/') && file.size <= MAX_MAP_IMAGE_SIZE);
-            if (newFiles.length > 0) {
+            const total = [...mapImages, ...newFiles].reduce((sum, f) => sum + f.size, 0);
+            if (total > MAX_AI_IMAGES_BYTES) {
+                useUIStore.getState().showNotification(imagesTooLargeMessage(), 'warning');
+            } else if (newFiles.length > 0) {
                 setDraftValue('mapImages', [...mapImages, ...newFiles]);
             }
+        }
+        // Azzera l'input: dopo aver rimosso un'immagine deve poter essere riselezionata.
+        if ('value' in e.target && e.target instanceof HTMLInputElement) {
+            e.target.value = '';
         }
     };
 

@@ -1,5 +1,6 @@
 import { GoogleGenAI, Chat, Content } from "@google/genai";
 import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, VEHICLE_SPECS_SCHEMA, DiaryEntry, RECEIPT_SCAN_SCHEMA, ScannedReceiptData } from '../types';
+import { todayLocalISO } from '../src/utils/hooks';
 
 export const PRIMARY_MODEL = 'gemini-3.7-flash';
 export const FALLBACK_MODEL = 'gemini-3.5-flash';
@@ -10,6 +11,18 @@ export const FALLBACK_MODEL = 'gemini-3.5-flash';
 export const isTransientGeminiError = (e: any): boolean => {
     const raw = String(e?.message || e || '');
     return /503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|temporarily unavailable|overload|404|not found/i.test(raw);
+};
+
+// Gemini accetta al massimo ~20 MB di dati inline per richiesta e il base64
+// aumenta la dimensione di circa un terzo: 10 MB di immagini restano nel limite.
+export const MAX_AI_IMAGES_BYTES = 10 * 1024 * 1024;
+
+export const imagesTooLargeMessage = (): string =>
+    `Immagini troppo grandi: il totale non può superare ${MAX_AI_IMAGES_BYTES / (1024 * 1024)} MB.`;
+
+const assertImagesSize = (files: (File | null | undefined)[]) => {
+    const total = files.reduce((sum, f) => sum + (f?.size || 0), 0);
+    if (total > MAX_AI_IMAGES_BYTES) throw new Error(imagesTooLargeMessage());
 };
 
 // Legge un File e ne restituisce il base64 (senza prefisso data URL).
@@ -220,6 +233,7 @@ REGOLE JSON: Restituisci esclusivamente l'oggetto JSON richiesto secondo ITINERA
     
     const parts: any[] = [{ text: prompt }];
     if (mapImages && mapImages.length > 0) {
+        assertImagesSize(mapImages);
         for (const img of mapImages) {
             const base64Data = await fileToBase64(img);
             parts.push({ inlineData: { data: base64Data, mimeType: img.type } });
@@ -237,6 +251,7 @@ Esegui un'analisi tecnica dettagliata.`;
     
     const parts: any[] = [{ text: prompt }];
     if (image) {
+        assertImagesSize([image]);
         const base64Data = await fileToBase64(image);
         parts.push({ inlineData: { data: base64Data, mimeType: image.type } });
     }
@@ -301,6 +316,7 @@ export const scanReceiptImage = async (image: File): Promise<ScannedReceiptData>
     const prompt = `Analizza questa immagine di uno scontrino o ricevuta di manutenzione moto. Estrai: data, descrizione sintetica dei lavori, costo totale, chilometri (se presenti) e tipo di intervento (Ordinaria, Straordinaria, Eccezionale).`;
     const config = { responseMimeType: "application/json", responseSchema: RECEIPT_SCAN_SCHEMA };
     
+    assertImagesSize([image]);
     const base64Data = await fileToBase64(image);
 
     const response = await apiProxy(PRIMARY_MODEL, { 
@@ -311,7 +327,7 @@ export const scanReceiptImage = async (image: File): Promise<ScannedReceiptData>
     }, config);
 
     return {
-        date: response.data || new Date().toISOString().split('T')[0],
+        date: response.data || todayLocalISO(),
         description: response.descrizione || '',
         cost: response.costo || 0,
         kilometers: response.chilometri || 0,

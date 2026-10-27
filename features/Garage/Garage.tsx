@@ -358,7 +358,7 @@ const Garage: React.FC = () => {
             onClose={() => setIsDeleteModalOpen(false)}
             onConfirm={confirmDelete}
             title="Conferma Eliminazione"
-            message="Sei sicuro di voler rimuovere questo veicolo dal garage? Questa azione è irreversibile."
+            message="Sei sicuro di voler rimuovere questo veicolo dal garage? Verranno eliminati anche le sue diagnosi, gli interventi di manutenzione e i promemoria. Questa azione è irreversibile."
         />
 
         <div className="flex items-center justify-between mb-2">

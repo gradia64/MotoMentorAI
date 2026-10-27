@@ -12,6 +12,7 @@ import { useTripStore } from '../../src/store/useTripStore';
 import { useUIStore } from '../../src/store/useUIStore';
 
 import Tooltip from '../../components/Tooltip';
+import { MAX_AI_IMAGES_BYTES, imagesTooLargeMessage } from '../../services/geminiService';
 
 
 const VirtualMechanic: React.FC = () => {
@@ -190,7 +191,15 @@ const VirtualMechanic: React.FC = () => {
                                             type="file" 
                                             id="problem-image-upload" 
                                             accept="image/*"
-                                            onChange={(e) => setProblemImage(e.target.files ? e.target.files[0] : null)} 
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0] ?? null;
+                                                e.target.value = '';
+                                                if (file && file.size > MAX_AI_IMAGES_BYTES) {
+                                                    useUIStore.getState().showNotification(imagesTooLargeMessage(), 'warning');
+                                                    return;
+                                                }
+                                                setProblemImage(file);
+                                            }} 
                                             className="hidden"
                                         />
                                     </div>

@@ -33,3 +33,19 @@ export const parseLocalDate = (value?: string | null): Date | null => {
     }
     return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 };
+
+// Data di oggi come 'YYYY-MM-DD' nel fuso locale: toISOString() usa l'UTC e
+// tra mezzanotte e l'1-2 di notte restituirebbe la data di ieri.
+export const todayLocalISO = (): string => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+// Formatta una data 'YYYY-MM-DD' (o ISO completa) per la UI, senza slittamenti di fuso.
+export const formatLocalDate = (value?: string | null): string =>
+    parseLocalDate(value)?.toLocaleDateString('it-IT') ?? (value || 'N/D');
+
+// Timestamp per ordinare date 'YYYY-MM-DD'; le date non valide vanno in fondo.
+export const localDateTime = (value?: string | null): number =>
+    parseLocalDate(value)?.getTime() ?? 0;

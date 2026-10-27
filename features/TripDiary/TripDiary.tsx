@@ -44,6 +44,9 @@ const TripDiary: React.FC = () => {
     }, [activeTrip?.id, selectedDay]);
 
     const handleTripSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        // Come per il cambio giorno: la nota non salvata non va persa in silenzio.
+        // La select è controllata, quindi annullando resta sul viaggio corrente.
+        if (unsavedChanges && !window.confirm("Hai modifiche non salvate. Vuoi scartarle?")) return;
         setActiveDiaryTrip(e.target.value);
         setSelectedDay(1); // Reset to day 1 on trip change
     };

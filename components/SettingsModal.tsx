@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { KeyIcon, XMarkIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { useUIStore } from '../src/store/useUIStore';
+import { useChatStore } from '../src/store/useChatStore';
 import { getGeminiKey, setGeminiKey } from '../src/local/client';
 
 // Finestra Impostazioni: gestisce la chiave API Gemini come secret LOCALE
@@ -33,6 +34,9 @@ export const SettingsModal: React.FC = () => {
             await setGeminiKey(trimmed);
             // Aggiorna anche il runtime corrente, senza riavviare l'app.
             window.GEMINI_API_KEY = trimmed;
+            // La sessione chat aperta ha la vecchia chiave: al prossimo messaggio
+            // viene ricreata dallo storico con quella nuova.
+            useChatStore.setState({ chatSession: null });
             showNotification('Chiave API Gemini salvata sul dispositivo.');
             setSettingsOpen(false);
         } catch (e: any) {

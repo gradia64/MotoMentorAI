@@ -9,6 +9,7 @@ import { useAuthStore } from './useAuthStore';
 import { diagnoseProblem, getMaintenanceTips, scanReceiptImage } from '../../services/geminiService';
 import { generatePdf } from '../utils/pdf';
 import { handleDataError, OperationType } from '../utils/dataErrors';
+import { formatLocalDate, localDateTime } from '../utils/hooks';
 
 interface MechanicState {
     maintenanceLog: MaintenanceRecord[];
@@ -307,10 +308,10 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
                     addWrappedText("LOG INTERVENTI:", { size: 14, color: [37, 99, 235], marginBottom: 5 });
                     
                     // Sort by date descending
-                    const sortedLog = [...maintenanceLog].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                    const sortedLog = [...maintenanceLog].sort((a, b) => localDateTime(b.date) - localDateTime(a.date));
                     
                     sortedLog.forEach((record, index) => {
-                        const dateStr = new Date(record.date).toLocaleDateString();
+                        const dateStr = formatLocalDate(record.date);
                         addWrappedText(`${dateStr} - ${record.type.toUpperCase()}`, { size: 12, color: [31, 41, 55], marginBottom: 1 });
                         addWrappedText(`Chilometri: ${record.kilometers || 'N/D'} km`);
                         addWrappedText(`Costo: ${record.cost ? `${record.cost} €` : 'N/D'}`);
@@ -322,7 +323,7 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
                     });
 
                     addSeparator({ marginTop: 10 });
-                    const today = new Date().toLocaleDateString();
+                    const today = new Date().toLocaleDateString('it-IT');
                     addWrappedText(`Report generato da MotoMentor il ${today}`, { size: 9, color: [107, 114, 128], marginBottom: 0 });
                 });
             } catch (error) {
