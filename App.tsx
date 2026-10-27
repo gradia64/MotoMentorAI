@@ -293,7 +293,7 @@ const AppContent: React.FC = () => {
             </nav>
 
             <footer className="text-center py-10 px-4 text-sm text-gray-500">
-                <p>&copy; {new Date().getFullYear()} MotoMentor AI. Tutti i diritti riservati.</p>
+                <p>&copy; {new Date().getFullYear()} MotoMentor AI. Rilasciato sotto licenza GPL-3.0 (vedi <a href="https://www.gnu.org/licenses/gpl-3.0.html" className="underline hover:text-gray-300" target="_blank" rel="noreferrer">LICENSE</a>).</p>
                 <div className="mt-4 max-w-4xl mx-auto text-xs text-gray-600 flex items-start justify-center gap-2">
                     <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5 text-yellow-600" />
                     <p className="text-left">
