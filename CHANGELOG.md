@@ -9,6 +9,8 @@ versioni il [Semantic Versioning](https://semver.org/lang/it/).
 
 ## [Non rilasciato]
 
+## [1.0.0] — 2026-10-27
+
 Prima versione pubblicata.
 
 ### Aggiunto
@@ -30,3 +32,6 @@ Prima versione pubblicata.
 - La chiave Gemini resta sul dispositivo (`gemini.key`, permessi 0600) e non è
   mai inclusa nel pacchetto.
 - Un utente non può modificare né cancellare i viaggi condivisi di un altro.
+
+[Non rilasciato]: https://github.com/gradia64/MotoMentorAI/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/gradia64/MotoMentorAI/releases/tag/v1.0.0

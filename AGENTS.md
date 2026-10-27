@@ -40,9 +40,13 @@ le sue diagnosi, interventi e promemoria.
 attestazione di provenienza; nessun secret). Chiave di rilascio creata il
 2026-10-27 (primaria `B9BE9034…D81EACE4`, sottochiave dei tag `989392ED…0108A445`,
 impronte in `scripts/release-keys.sh`, pubblica in `packaging/motomentor-release-key.asc`).
-**Ancora da fare a mano**: `git config` di firma nel checkout, pubblicare la
-chiave sui keyserver, creare l'environment `release` su GitHub, rileggere
-`packaging/release-notes/1.0.0.md` (in BOZZA).
+Chiave pubblicata su keys.openpgp.org (email confermata) e
+keyserver.ubuntu.com; `git config` di firma fatto in questo checkout.
+Environment `release` su GitHub creato (revisore gradia64, solo tag `v*`).
+Note e CHANGELOG della 1.0.0 chiusi. Un primo tag `v1.0.0`
+(su `7e0ec13`) è stato cancellato: la release si era fermata al controllo del
+CHANGELOG senza pubblicare nulla. **Da fare**: rifirmare `v1.0.0` sul commit
+di chiusura e approvare il job `publish`.
 Scelta voluta (non è un bug): l'export GPX del viaggio condiviso salva un file
 per tappa, con un dialog ciascuno, per avere una traccia per ogni giorno di viaggio.
 
