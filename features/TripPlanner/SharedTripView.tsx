@@ -20,32 +20,47 @@ import ActionButton from '../../components/ActionButton';
 import { motion } from 'framer-motion';
 
 interface SharedTripViewProps {
-    id: string;
+    // Id del viaggio condiviso salvato localmente (apertura da archivio).
+    id?: string;
+    // Oggetto viaggio completo (apertura da file .mmt.json condiviso).
+    trip?: SharedTrip;
     onBack: () => void;
 }
 
-const SharedTripView: React.FC<SharedTripViewProps> = ({ id, onBack }) => {
-    const { getSharedTrip, sharedTrip } = useTripStore();
+const SharedTripView: React.FC<SharedTripViewProps> = ({ id, trip, onBack }) => {
+    const { getSharedTrip } = useTripStore();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [obj, setObj] = useState<SharedTrip | null>(trip ?? null);
 
     useEffect(() => {
         const fetchTrip = async () => {
             setLoading(true);
+            if (trip) {
+                // Apertura da file condiviso: i dati sono gia' disponibili.
+                setObj(trip);
+                setLoading(false);
+                return;
+            }
+            if (!id) {
+                setError("Viaggio non trovato.");
+                setLoading(false);
+                return;
+            }
             const data = await getSharedTrip(id);
             if (!data) {
-                setError("Viaggio non trovato o link scaduto.");
+                setError("Viaggio non trovato o non più disponibile.");
             }
             setLoading(false);
         };
         fetchTrip();
-    }, [id, getSharedTrip]);
+    }, [id, trip, getSharedTrip]);
 
     const handleDownloadAllGpx = () => {
-        if (!sharedTrip) return;
+        if (!obj) return;
         // Simple implementation: download individual files if many, or one big. 
         // For now, let's just use the first day or logic from the planner
-        sharedTrip.itinerary.dailySchedule.forEach(day => {
+        obj.itinerary.dailySchedule.forEach(day => {
             const gpx = generateGpxFile(day);
             downloadFile(gpx, `tappa_${day.day}.gpx`, 'application/gpx+xml');
         });
@@ -60,7 +75,7 @@ const SharedTripView: React.FC<SharedTripViewProps> = ({ id, onBack }) => {
         );
     }
 
-    if (error || !sharedTrip) {
+    if (error || !obj) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-red-500/10 rounded-2xl border border-red-500/20">
                 <ExclamationTriangleIcon className="w-16 h-16 text-red-500 mb-4" />
@@ -71,7 +86,7 @@ const SharedTripView: React.FC<SharedTripViewProps> = ({ id, onBack }) => {
         );
     }
 
-    const totalKm = sharedTrip.itinerary.dailySchedule.reduce((acc, day) => acc + day.stageKilometers, 0);
+    const totalKm = obj.itinerary.dailySchedule.reduce((acc, day) => acc + day.stageKilometers, 0);
 
     return (
         <div className="max-w-4xl mx-auto p-4 md:p-8 animate-fade-in">
@@ -88,12 +103,12 @@ const SharedTripView: React.FC<SharedTripViewProps> = ({ id, onBack }) => {
                         Itinerario Condiviso
                     </div>
                     <h1 className="text-3xl md:text-5xl font-black text-white mb-3 tracking-tighter drop-shadow-lg">
-                        {sharedTrip.tripTitle}
+                        {obj.tripTitle}
                     </h1>
                     <div className="flex flex-wrap items-center justify-center gap-4 text-white/80 text-sm font-medium">
-                        <span className="flex items-center gap-1"><MapPinIcon className="w-4 h-4" /> {sharedTrip.itinerary.dailySchedule.length} Giorni</span>
+                        <span className="flex items-center gap-1"><MapPinIcon className="w-4 h-4" /> {obj.itinerary.dailySchedule.length} Giorni</span>
                         <span className="flex items-center gap-1 font-bold text-blue-300"><ClockIcon className="w-4 h-4" /> {totalKm} Km Totali</span>
-                        <span className="flex items-center gap-1 border-l border-white/20 pl-4"><CalendarIcon className="w-4 h-4" /> Creato da {sharedTrip.ownerName}</span>
+                        <span className="flex items-center gap-1 border-l border-white/20 pl-4"><CalendarIcon className="w-4 h-4" /> Creato da {obj.ownerName}</span>
                     </div>
 
                     {/* Background Accents */}
@@ -108,7 +123,7 @@ const SharedTripView: React.FC<SharedTripViewProps> = ({ id, onBack }) => {
                              L'Avventura
                         </h2>
                         <p className="text-gray-300 leading-relaxed text-lg italic bg-gray-900/40 p-6 rounded-2xl border border-gray-700/30">
-                            "{sharedTrip.itinerary.generalDescription}"
+                            "{obj.itinerary.generalDescription}"
                         </p>
                     </div>
 
@@ -126,7 +141,7 @@ const SharedTripView: React.FC<SharedTripViewProps> = ({ id, onBack }) => {
                         {/* Timeline Connector */}
                         <div className="absolute left-6 top-8 bottom-8 w-0.5 bg-gray-700 md:left-8"></div>
 
-                        {sharedTrip.itinerary.dailySchedule.map((day: Day, index: number) => (
+                        {obj.itinerary.dailySchedule.map((day: Day, index: number) => (
                             <motion.div 
                                 key={day.day}
                                 initial={{ opacity: 0, x: -20 }}

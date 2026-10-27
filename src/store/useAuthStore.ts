@@ -1,20 +1,12 @@
 
 import { create } from 'zustand';
-import { 
-    onAuthStateChanged, 
-    signInWithPopup, 
-    signInWithRedirect,
-    getRedirectResult,
-    setPersistence,
-    browserLocalPersistence,
-    GoogleAuthProvider, 
-    signOut,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    sendPasswordResetEmail,
-    updateProfile
-} from 'firebase/auth';
-import { auth } from '../firebase';
+import {
+    initLocalDB,
+    getSession,
+    registerLocal,
+    loginLocal,
+    logoutLocal,
+} from '../local/client';
 import { useUIStore } from './useUIStore';
 import { AiMode } from '../../types';
 
@@ -27,119 +19,93 @@ interface AuthState {
     user: User | null;
     isAuthenticated: boolean;
     isCheckingAuth: boolean;
-    
+    dbReady: boolean;
+
     // Actions
-    checkAuth: () => void;
-    loginWithGoogle: () => Promise<void>;
-    loginWithGoogleRedirect: () => Promise<void>;
-    signUpWithEmail: (email: string, pass: string) => Promise<void>;
-    loginWithEmail: (email: string, pass: string) => Promise<void>;
-    resetPassword: (email: string) => Promise<void>;
+    bootstrap: () => Promise<void>;   // init DB + carica sessione
+    checkAuth: () => Promise<void>;   // ricarica lo stato sessione
+    register: (username: string, pass: string) => Promise<void>;
+    login: (username: string, pass: string) => Promise<void>;
     logout: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+const ui = () => useUIStore.getState();
+
+export const useAuthStore = create<AuthState>((set, get) => ({
     user: null,
     isAuthenticated: false,
     isCheckingAuth: true,
+    dbReady: false,
 
-    checkAuth: () => {
-        const { showNotification } = useUIStore.getState();
-        
-        set({ isCheckingAuth: true });
-
-        const authTimeout = setTimeout(() => {
+    bootstrap: async () => {
+        try {
+            if (!get().dbReady) {
+                await initLocalDB();
+                set({ dbReady: true });
+            }
+            await get().checkAuth();
+        } catch (err: any) {
+            console.error('Errore bootstrap auth locale:', err);
             set({ isCheckingAuth: false });
-        }, 10000);
+        }
+    },
 
-        setPersistence(auth, browserLocalPersistence).catch(err => console.error("Errore setPersistence:", err));
-
-        getRedirectResult(auth).then((result) => {
-            if (result?.user) {
-                showNotification("Accesso completato con successo!");
-            }
-        }).catch((error) => {
-            if (error.code === 'auth/missing-initial-state' || error.message?.includes('missing initial state')) {
-                showNotification("Errore di sessione: usa il popup o apri in una nuova scheda.", "error");
-            } else {
-                showNotification("Errore accesso: " + error.message, "error");
-            }
-        });
-
-        onAuthStateChanged(auth, (user) => {
-            clearTimeout(authTimeout);
-            if (user) {
-                set({ 
-                    user: { id: user.uid, username: user.displayName || user.email?.split('@')[0] || 'Utente' }, 
+    checkAuth: async () => {
+        set({ isCheckingAuth: true });
+        try {
+            const session = await getSession();
+            if (session) {
+                set({
+                    user: { id: session.uid, username: session.username },
                     isAuthenticated: true,
-                    isCheckingAuth: false 
+                    isCheckingAuth: false,
                 });
             } else {
                 set({ user: null, isAuthenticated: false, isCheckingAuth: false });
             }
-        });
-    },
-
-    loginWithGoogle: async () => {
-        const { showNotification } = useUIStore.getState();
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: 'select_account' });
-        try {
-            await signInWithPopup(auth, provider);
-        } catch (error: any) {
-            showNotification(error.message, "error");
+        } catch (err: any) {
+            console.error('Errore controllo sessione:', err);
+            set({ user: null, isAuthenticated: false, isCheckingAuth: false });
         }
     },
 
-    loginWithGoogleRedirect: async () => {
-        const { showNotification } = useUIStore.getState();
-        const provider = new GoogleAuthProvider();
+    register: async (username, pass) => {
         try {
-            await signInWithRedirect(auth, provider);
+            const session = await registerLocal(username, pass);
+            set({
+                user: { id: session.uid, username: session.username },
+                isAuthenticated: true,
+            });
+            ui().showNotification(`Benvenuto, ${session.username}!`);
         } catch (error: any) {
-            showNotification(error.message, "error");
-        }
-    },
-
-    signUpWithEmail: async (email, pass) => {
-        const { showNotification } = useUIStore.getState();
-        try {
-            const result = await createUserWithEmailAndPassword(auth, email, pass);
-            await updateProfile(result.user, { displayName: email.split('@')[0] });
-        } catch (error: any) {
-            showNotification(error.message, "error");
+            ui().showNotification(error.message || 'Errore di registrazione', 'error');
             throw error;
         }
     },
 
-    loginWithEmail: async (email, pass) => {
-        const { showNotification } = useUIStore.getState();
+    login: async (username, pass) => {
         try {
-            await signInWithEmailAndPassword(auth, email, pass);
+            const session = await loginLocal(username, pass);
+            set({
+                user: { id: session.uid, username: session.username },
+                isAuthenticated: true,
+            });
+            ui().showNotification(`Accesso completato. Ciao, ${session.username}!`);
         } catch (error: any) {
-            showNotification(error.message, "error");
+            ui().showNotification(error.message || 'Errore di accesso', 'error');
             throw error;
-        }
-    },
-
-    resetPassword: async (email) => {
-        const { showNotification } = useUIStore.getState();
-        try {
-            await sendPasswordResetEmail(auth, email);
-            showNotification("Email di reset inviata!");
-        } catch (error: any) {
-            showNotification(error.message, "error");
         }
     },
 
     logout: async () => {
-        const { showNotification } = useUIStore.getState();
         try {
-            await signOut(auth);
+            await logoutLocal();
+            set({ user: null, isAuthenticated: false });
             localStorage.removeItem('motomentor_active_vehicle');
-            useUIStore.getState().setMode(AiMode.Dashboard);
+            ui().setMode(AiMode.Dashboard);
+            ui().showNotification('Sessione chiusa.');
         } catch (error: any) {
-            showNotification(error.message, "error");
+            ui().showNotification(error.message, 'error');
         }
-    }
+    },
 }));

@@ -1,20 +1,14 @@
 
 import { create } from 'zustand';
-import { db, auth } from '../firebase';
-import { 
-    collection, 
-    onSnapshot, 
-    doc, 
-    setDoc, 
-    deleteDoc 
-} from 'firebase/firestore';
+import { subscribeCollection, upsertDoc, removeDoc } from '../local/client';
 import { MaintenanceRecord, MaintenanceReminder, SavedDiagnosis, MaintenanceTips } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useGarageStore } from './useGarageStore';
 import { useTripStore } from './useTripStore';
+import { useAuthStore } from './useAuthStore';
 import { diagnoseProblem, getMaintenanceTips, scanReceiptImage } from '../../services/geminiService';
 import { generatePdf } from '../utils/pdf';
-import { handleFirestoreError, OperationType } from '../utils/firestoreErrors';
+import { handleDataError, OperationType } from '../utils/dataErrors';
 
 interface MechanicState {
     maintenanceLog: MaintenanceRecord[];
@@ -48,6 +42,15 @@ interface MechanicState {
     downloadMaintenanceLogPdf: () => void;
 }
 
+// Formato documento: { id, userId, data } — identico a quanto faceva Firestore.
+interface Doc<T> {
+    id: string;
+    userId: string;
+    data: T;
+}
+
+const currentUid = (): string | undefined => useAuthStore.getState().user?.id;
+
 export const useMechanicStore = create<MechanicState>((set, get) => ({
     maintenanceLog: [],
     reminders: [],
@@ -62,14 +65,14 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
     },
 
     initMechanic: (userId) => {
-        const unsub1 = onSnapshot(collection(db, `users/${userId}/maintenance`), (snapshot) => {
-            set({ maintenanceLog: snapshot.docs.map(doc => doc.data().data as MaintenanceRecord) });
+        const unsub1 = subscribeCollection<Doc<MaintenanceRecord>>(`users/${userId}/maintenance`, (rows) => {
+            set({ maintenanceLog: rows.map(row => row.data) });
         });
-        const unsub2 = onSnapshot(collection(db, `users/${userId}/reminders`), (snapshot) => {
-            set({ reminders: snapshot.docs.map(doc => doc.data().data as MaintenanceReminder) });
+        const unsub2 = subscribeCollection<Doc<MaintenanceReminder>>(`users/${userId}/reminders`, (rows) => {
+            set({ reminders: rows.map(row => row.data) });
         });
-        const unsub3 = onSnapshot(collection(db, `users/${userId}/diagnoses`), (snapshot) => {
-            set({ savedDiagnoses: snapshot.docs.map(doc => doc.data().data as SavedDiagnosis) });
+        const unsub3 = subscribeCollection<Doc<SavedDiagnosis>>(`users/${userId}/diagnoses`, (rows) => {
+            set({ savedDiagnoses: rows.map(row => row.data) });
         });
         return () => { unsub1(); unsub2(); unsub3(); };
     },
@@ -115,7 +118,7 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
         const { diagnosis, activeDiagnosisId, draft } = get();
         const { activeVehicle } = useGarageStore.getState();
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!diagnosis || !userId || !activeVehicle) return;
 
         const diag: SavedDiagnosis = {
@@ -126,10 +129,10 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
             diagnosisText: diagnosis
         };
         try {
-            await setDoc(doc(db, `users/${userId}/diagnoses`, diag.id), { id: diag.id, userId, data: diag });
+            await upsertDoc(`users/${userId}/diagnoses`, diag.id, { id: diag.id, userId, data: diag });
             showNotification("Diagnosi salvata.");
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/diagnoses/${diag.id}`);
+            showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/diagnoses/${diag.id}`), "error");
         }
     },
 
@@ -142,57 +145,57 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
 
     deleteDiagnosis: async (id) => {
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         try {
-            await deleteDoc(doc(db, `users/${userId}/diagnoses`, id));
+            await removeDoc(`users/${userId}/diagnoses`, id);
             showNotification("Diagnosi eliminata.");
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/diagnoses/${id}`);
+            showNotification(handleDataError(e, OperationType.DELETE, `users/${userId}/diagnoses/${id}`), "error");
         }
     },
 
     addMaintenanceRecord: async (record) => {
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         const newRecord = { ...record, id: crypto.randomUUID() };
         try {
-            await setDoc(doc(db, `users/${userId}/maintenance`, newRecord.id), { id: newRecord.id, userId, data: newRecord });
+            await upsertDoc(`users/${userId}/maintenance`, newRecord.id, { id: newRecord.id, userId, data: newRecord });
             showNotification("Intervento registrato.");
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/maintenance/${newRecord.id}`);
+            showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/maintenance/${newRecord.id}`), "error");
         }
     },
 
     deleteMaintenanceRecord: async (id) => {
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         try {
-            await deleteDoc(doc(db, `users/${userId}/maintenance`, id));
+            await removeDoc(`users/${userId}/maintenance`, id);
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/maintenance/${id}`);
+            useUIStore.getState().showNotification(handleDataError(e, OperationType.DELETE, `users/${userId}/maintenance/${id}`), "error");
         }
     },
 
     addReminder: async (r) => {
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         const newReminder = { ...r, id: crypto.randomUUID() };
         try {
-            await setDoc(doc(db, `users/${userId}/reminders`, newReminder.id), { id: newReminder.id, userId, data: newReminder });
+            await upsertDoc(`users/${userId}/reminders`, newReminder.id, { id: newReminder.id, userId, data: newReminder });
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/reminders/${newReminder.id}`);
+            useUIStore.getState().showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/reminders/${newReminder.id}`), "error");
         }
     },
 
     deleteReminder: async (id) => {
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         try {
-            await deleteDoc(doc(db, `users/${userId}/reminders`, id));
+            await removeDoc(`users/${userId}/reminders`, id);
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/reminders/${id}`);
+            useUIStore.getState().showNotification(handleDataError(e, OperationType.DELETE, `users/${userId}/reminders/${id}`), "error");
         }
     },
 
@@ -219,7 +222,7 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
             try {
                 generatePdf(`Diagnosi_${activeVehicle?.model || 'Moto'}.pdf`, "Report Diagnosi Meccanica", ({ addWrappedText }: any) => {
                     addWrappedText(`Veicolo: ${activeVehicle?.model || 'N/D'}`);
-                    addWrappedText("ANALISI IA:", { size: 14, color: [37, 99, 235], marginTop: 5 });
+                    addWrappedText("ANALISI IA:", { size: 14, color: [37, 99, 235] });
                     addWrappedText(diagnosis);
                 });
             } finally {

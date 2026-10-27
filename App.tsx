@@ -1,12 +1,13 @@
 
 import React, { Suspense, lazy, useEffect } from 'react';
-import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, BookOpenIcon, ArrowRightOnRectangleIcon, HomeIcon } from '@heroicons/react/24/outline';
+import { MapPinIcon, WrenchScrewdriverIcon, CogIcon, ChatBubbleLeftRightIcon, ExclamationTriangleIcon, BookOpenIcon, ArrowRightOnRectangleIcon, HomeIcon, KeyIcon } from '@heroicons/react/24/outline';
 
-import { AiMode } from './types';
+import { AiMode, SharedTrip } from './types';
 import TabButton from './components/TabButton';
 import Notification from './components/Notification';
 import Logo from './components/Logo';
 import Login from './components/Login';
+import SettingsModal from './components/SettingsModal';
 import { motion } from 'motion/react';
 
 // Stores
@@ -16,6 +17,7 @@ import { useGarageStore } from './src/store/useGarageStore';
 import { useTripStore } from './src/store/useTripStore';
 import { useMechanicStore } from './src/store/useMechanicStore';
 import { useChatStore } from './src/store/useChatStore';
+import { onOpenSharedTrip } from './src/local/client';
 
 // --- Lazy Loading of Feature Components ---
 const TripPlanner = lazy(() => import('./features/TripPlanner/TripPlanner'));
@@ -26,13 +28,6 @@ const TripDiary = lazy(() => import('./features/TripDiary/TripDiary'));
 const Dashboard = lazy(() => import('./features/Dashboard/Dashboard'));
 const SharedTripView = lazy(() => import('./features/TripPlanner/SharedTripView'));
 
-// Declare jspdf from window for global access
-declare global {
-    interface Window {
-        jspdf: any;
-    }
-}
-
 // --- Loading Component for Suspense ---
 const SectionLoader: React.FC = () => (
     <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
@@ -42,8 +37,8 @@ const SectionLoader: React.FC = () => (
 );
 
 const AppContent: React.FC = () => {
-    const { mode, setMode, error } = useUIStore();
-    const { user, isAuthenticated, isCheckingAuth, checkAuth, logout } = useAuthStore();
+    const { mode, setMode, error, setSettingsOpen } = useUIStore();
+    const { user, isAuthenticated, isCheckingAuth, bootstrap, logout } = useAuthStore();
     const { activeVehicle, deadlineAlerts, initGarage } = useGarageStore();
     const { initTrips } = useTripStore();
     const { initMechanic } = useMechanicStore();
@@ -51,6 +46,9 @@ const AppContent: React.FC = () => {
     
     const [fatalError, setFatalError] = React.useState<string | null>(null);
     const [sharedTripId, setSharedTripId] = React.useState<string | null>(null);
+    // Viaggio condiviso aperto da FILE (.mmt.json): il main process invia
+    // l'oggetto via IPC 'shared-trip:open' (menu File o doppio click sul file).
+    const [sharedTripObject, setSharedTripObject] = React.useState<SharedTrip | null>(null);
 
     useEffect(() => {
         const handleError = (event: ErrorEvent) => {
@@ -63,20 +61,33 @@ const AppContent: React.FC = () => {
         window.addEventListener('error', handleError);
         window.addEventListener('unhandledrejection', handleRejection);
 
-        // Routing logic for shared trips
+        // Routing legacy per viaggi condivisi via URL (compatibilita' web/dev).
         const path = window.location.pathname;
         if (path.startsWith('/shared/')) {
             const id = path.split('/shared/')[1];
             if (id) setSharedTripId(id);
         }
 
-        checkAuth();
+        // Inizializza il DB locale e carica la sessione dell'utente.
+        void bootstrap();
+
+        // Apertura viaggio condiviso da file (dialog del main o file associato).
+        let unsubOpenSharedTrip: (() => void) | undefined;
+        try {
+            unsubOpenSharedTrip = onOpenSharedTrip((trip) => {
+                setSharedTripObject(trip);
+                setSharedTripId(null);
+            });
+        } catch (e) {
+            // Solo in contesto web (nessun bridge Electron): nessuna azione.
+        }
 
         return () => {
             window.removeEventListener('error', handleError);
             window.removeEventListener('unhandledrejection', handleRejection);
+            if (unsubOpenSharedTrip) unsubOpenSharedTrip();
         };
-    }, []);
+    }, [bootstrap]);
 
     // Initialize/Cleanup shop listeners based on user session
     useEffect(() => {
@@ -93,7 +104,7 @@ const AppContent: React.FC = () => {
                 unsubChats();
             };
         }
-    }, [user, isAuthenticated]);
+    }, [user, isAuthenticated, initGarage, initTrips, initMechanic, initChats]);
 
     if (fatalError) {
         return (
@@ -114,6 +125,16 @@ const AppContent: React.FC = () => {
                         Ignora e prosegui (Sperimentale)
                     </button>
                 </div>
+            </div>
+        );
+    }
+
+    if (sharedTripObject) {
+        return (
+            <div className="bg-slate-900 min-h-screen text-white">
+                <Suspense fallback={<SectionLoader />}>
+                    <SharedTripView trip={sharedTripObject} onBack={() => setSharedTripObject(null)} />
+                </Suspense>
             </div>
         );
     }
@@ -197,6 +218,13 @@ const AppContent: React.FC = () => {
                                 <p className="text-[10px] text-gray-500 uppercase font-bold">Utente</p>
                                 <p className="text-xs font-medium text-white">{user?.username}</p>
                             </div>
+                            <button 
+                                onClick={() => setSettingsOpen(true)}
+                                className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-full"
+                                title="Impostazioni (chiave API Gemini)"
+                            >
+                                <KeyIcon className="w-5 h-5 md:w-6 md:h-6" />
+                            </button>
                             <button 
                                 onClick={logout}
                                 className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-full"
@@ -291,9 +319,11 @@ const NavIcon: React.FC<{ active: boolean; onClick: () => void; icon: React.Reac
 
 const App: React.FC = () => {
     return (
-        <AppContent />
+        <>
+            <AppContent />
+            <SettingsModal />
+        </>
     );
 };
 
 export default App;
-

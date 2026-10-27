@@ -1,22 +1,14 @@
 
 import { create } from 'zustand';
-import { db, auth } from '../firebase';
-import { 
-    collection, 
-    onSnapshot, 
-    doc, 
-    setDoc, 
-    deleteDoc,
-    query,
-    getDoc
-} from 'firebase/firestore';
+import { subscribeCollection, upsertDoc, removeDoc, listCollection, saveSharedTripFile } from '../local/client';
 import { Itinerary, SavedTrip, SharedTrip } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useGarageStore } from './useGarageStore';
+import { useAuthStore } from './useAuthStore';
 import { generateItinerary, generateTripDiarySummary } from '../../services/geminiService';
 import { generatePdf } from '../utils/pdf';
 import { downloadFile } from '../utils/mapsHelpers';
-import { handleFirestoreError, OperationType } from '../utils/firestoreErrors';
+import { handleDataError, OperationType } from '../utils/dataErrors';
 
 interface TripState {
     tripHistory: SavedTrip[];
@@ -71,6 +63,15 @@ const initialDraft: TripState['draft'] = {
     mapImages: [],
 };
 
+// Formato documento: { id, userId, data } — identico a quanto faceva Firestore.
+interface TripDoc {
+    id: string;
+    userId: string;
+    data: SavedTrip;
+}
+
+const currentUid = (): string | undefined => useAuthStore.getState().user?.id;
+
 export const useTripStore = create<TripState>((set, get) => ({
     tripHistory: [],
     itinerary: null,
@@ -80,9 +81,9 @@ export const useTripStore = create<TripState>((set, get) => ({
     draft: initialDraft,
 
     initTrips: (userId) => {
-        const unsub = onSnapshot(query(collection(db, `users/${userId}/trips`)), (snapshot) => {
-            set({ tripHistory: snapshot.docs.map(doc => doc.data().data as SavedTrip) });
-        }, (error) => console.error("Firestore Listen Error (trips):", error));
+        const unsub = subscribeCollection<TripDoc>(`users/${userId}/trips`, (rows) => {
+            set({ tripHistory: rows.map(row => row.data) });
+        });
         return unsub;
     },
 
@@ -107,7 +108,7 @@ export const useTripStore = create<TripState>((set, get) => ({
     saveItinerary: async () => {
         const { itinerary, activeTripId, draft, tripHistory } = get();
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!itinerary || !userId) return;
 
         const { mapImages, ...inputsToSave } = draft;
@@ -117,10 +118,10 @@ export const useTripStore = create<TripState>((set, get) => ({
             if (existingTrip) {
                 const updatedTrip = { ...existingTrip, inputs: inputsToSave, itinerary };
                 try {
-                    await setDoc(doc(db, `users/${userId}/trips`, updatedTrip.id), { id: updatedTrip.id, userId, data: updatedTrip });
+                    await upsertDoc(`users/${userId}/trips`, updatedTrip.id, { id: updatedTrip.id, userId, data: updatedTrip });
                     showNotification("Viaggio aggiornato!");
                 } catch (e: any) {
-                    handleFirestoreError(e, OperationType.WRITE, `users/${userId}/trips/${updatedTrip.id}`);
+                    showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/trips/${updatedTrip.id}`), "error");
                 }
                 return;
             }
@@ -129,11 +130,11 @@ export const useTripStore = create<TripState>((set, get) => ({
         const newId = crypto.randomUUID();
         const newTrip: SavedTrip = { id: newId, inputs: inputsToSave, itinerary, diaryEntries: [] };
         try {
-            await setDoc(doc(db, `users/${userId}/trips`, newId), { id: newId, userId, data: newTrip });
+            await upsertDoc(`users/${userId}/trips`, newId, { id: newId, userId, data: newTrip });
             set({ activeTripId: newId });
             showNotification("Viaggio salvato!");
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/trips/${newId}`);
+            showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/trips/${newId}`), "error");
         }
     },
 
@@ -148,26 +149,26 @@ export const useTripStore = create<TripState>((set, get) => ({
 
     deleteTrip: async (id) => {
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         try {
-            await deleteDoc(doc(db, `users/${userId}/trips`, id));
+            await removeDoc(`users/${userId}/trips`, id);
             if (get().activeTripId === id) set({ activeTripId: null });
             showNotification("Viaggio eliminato.");
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/trips/${id}`);
+            showNotification(handleDataError(e, OperationType.DELETE, `users/${userId}/trips/${id}`), "error");
         }
     },
 
-    updateTrip: async (updatedTrip: SavedTrip) => {
+    updateTrip: async (updatedTrip) => {
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         try {
-            await setDoc(doc(db, `users/${userId}/trips`, updatedTrip.id), { id: updatedTrip.id, userId, data: updatedTrip });
+            await upsertDoc(`users/${userId}/trips`, updatedTrip.id, { id: updatedTrip.id, userId, data: updatedTrip });
             showNotification("Diario aggiornato.");
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/trips/${updatedTrip.id}`);
+            showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/trips/${updatedTrip.id}`), "error");
         }
     },
 
@@ -180,16 +181,24 @@ export const useTripStore = create<TripState>((set, get) => ({
 
     importHistory: async (file) => {
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         try {
             const imported = JSON.parse(await file.text());
-            // In a real app we might want to batch upload these to Firebase
-            // for simplicity now we just update local state (which will be overwritten by listener)
-            // or we could iterate and save each. Let's just notify.
-            showNotification("Funzione import richiede salvataggio manuale.");
-        } catch (e) {
-            showNotification("Errore importazione.", "error");
+            if (!Array.isArray(imported)) throw new Error("Formato file non valido.");
+
+            // Miglioria rispetto alla versione Firebase: l'import ora salva
+            // davvero ogni viaggio nel database locale.
+            let saved = 0;
+            for (const trip of imported) {
+                if (trip && trip.id && trip.itinerary) {
+                    await upsertDoc(`users/${userId}/trips`, trip.id, { id: trip.id, userId, data: trip });
+                    saved++;
+                }
+            }
+            showNotification(`Importati ${saved} viaggi nell'archivio locale.`);
+        } catch (e: any) {
+            showNotification("Errore importazione: " + (e.message || "file non valido"), "error");
         }
     },
 
@@ -201,12 +210,12 @@ export const useTripStore = create<TripState>((set, get) => ({
         try {
             const summary = await generateTripDiarySummary(trip.itinerary, trip.diaryEntries);
             const updatedTrip = { ...trip, diarySummary: summary };
-            const userId = auth.currentUser?.uid;
+            const userId = currentUid();
             if (userId) {
-                await setDoc(doc(db, `users/${userId}/trips`, trip.id), { id: trip.id, userId, data: updatedTrip });
+                await upsertDoc(`users/${userId}/trips`, trip.id, { id: trip.id, userId, data: updatedTrip });
                 showNotification("Racconto generato!");
             }
-        } catch (e: any) {
+        } catch (e) {
             showNotification("Errore generazione racconto.", "error");
         } finally {
             setLoading('isGeneratingDiarySummary', false);
@@ -271,41 +280,43 @@ export const useTripStore = create<TripState>((set, get) => ({
     shareTrip: async () => {
         const { itinerary } = get();
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
-        if (!itinerary || !userId) return null;
+        const user = useAuthStore.getState().user;
+        if (!itinerary || !user) return null;
 
         const sharedId = crypto.randomUUID();
         const sharedTrip: SharedTrip = {
             id: sharedId,
-            ownerId: userId,
-            ownerName: auth.currentUser?.displayName || 'Utente MotoMentor',
+            ownerId: user.id,
+            ownerName: user.username,
             tripTitle: itinerary.tripTitle,
             itinerary: itinerary,
             createdAt: new Date().toISOString()
         };
 
         try {
-            await setDoc(doc(db, 'sharedTrips', sharedId), sharedTrip);
-            const shareUrl = `${window.location.origin}/shared/${sharedId}`;
-            await navigator.clipboard.writeText(shareUrl);
-            showNotification("Link di condivisione copiato negli appunti!");
+            // Con il desktop locale la condivisione e' un FILE esportabile
+            // (niente link cloud): si salva una copia anche nel DB locale per
+            // poter riaprire il viaggio condiviso dall'app.
+            await upsertDoc('sharedTrips', sharedId, sharedTrip);
+            const saved = await saveSharedTripFile(sharedTrip);
+            if (saved) {
+                showNotification("Viaggio condiviso esportato come file!");
+            } else {
+                showNotification("Esportazione annullata.", "warning");
+            }
             return sharedId;
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.WRITE, `sharedTrips/${sharedId}`);
+            showNotification(handleDataError(e, OperationType.WRITE, `sharedTrips/${sharedId}`), "error");
             return null;
         }
     },
 
     getSharedTrip: async (id) => {
         try {
-            const docRef = doc(db, 'sharedTrips', id);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data() as SharedTrip;
-                set({ sharedTrip: data });
-                return data;
-            }
-            return null;
+            const rows = await listCollection<SharedTrip>('sharedTrips');
+            const data = rows.find(t => t.id === id) || null;
+            set({ sharedTrip: data });
+            return data;
         } catch (e) {
             console.error("Error fetching shared trip:", e);
             return null;

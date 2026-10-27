@@ -35,7 +35,7 @@ export const formatGeminiError = (e: any): string => {
         return "I server di Gemini sono momentaneamente carichi. Riprova tra qualche istante.";
     }
     if (raw.includes("API_KEY_INVALID") || raw.includes("API key not valid")) {
-        return "Chiave Gemini API non valida. Verifica la chiave nelle impostazioni di Vercel.";
+        return "Chiave Gemini API non valida. Verifica la chiave nelle Impostazioni dell'app.";
     }
     if (raw.includes("PERMISSION_DENIED")) {
         return "Accesso negato dall'API Gemini. Controlla le restrizioni della chiave.";
@@ -63,7 +63,7 @@ export const formatGeminiError = (e: any): string => {
 const getAi = () => {
     const apiKey = getApiKey();
     if (!apiKey) {
-        throw new Error("GEMINI_API_KEY non trovata. Inserisci GEMINI_API_KEY o VITE_GEMINI_API_KEY nelle Environment Variables di Vercel e fai Redeploy.");
+        throw new Error("Chiave API Gemini non configurata. Aprila dalle Impostazioni dell'app (icona chiave in alto) e riprova.");
     }
     return new GoogleGenAI({ apiKey });
 };
@@ -259,7 +259,7 @@ export const getVehicleSpecs = async (model: string, year: string) => {
 export const createChatSession = (vehicle: GarageVehicle | null, history: Content[] = []): Chat => {
     const apiKey = getApiKey();
     if (!apiKey) {
-        throw new Error("GEMINI_API_KEY non configurata. Assicurati che sia presente nelle impostazioni di Vercel.");
+        throw new Error("Chiave API Gemini non configurata. Aprila dalle Impostazioni dell'app.");
     }
     const ai = new GoogleGenAI({ apiKey });
     const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;

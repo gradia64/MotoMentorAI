@@ -1,19 +1,13 @@
 
 import { create } from 'zustand';
-import { db, auth } from '../firebase';
-import { 
-    collection, 
-    onSnapshot, 
-    doc, 
-    setDoc, 
-    deleteDoc 
-} from 'firebase/firestore';
+import { subscribeCollection, upsertDoc, removeDoc } from '../local/client';
 import { Chat, Content, GenerateContentResponse } from '@google/genai';
 import { SavedChat } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useGarageStore } from './useGarageStore';
-import { createChatSession, sendDirectChatMessage, formatGeminiError, PRIMARY_MODEL, FALLBACK_MODEL } from '../../services/geminiService';
-import { handleFirestoreError, OperationType } from '../utils/firestoreErrors';
+import { useAuthStore } from './useAuthStore';
+import { createChatSession, sendDirectChatMessage, formatGeminiError } from '../../services/geminiService';
+import { handleDataError, OperationType } from '../utils/dataErrors';
 
 interface ChatState {
     savedChats: SavedChat[];
@@ -30,6 +24,15 @@ interface ChatState {
     deleteSavedChat: (id: string) => Promise<void>;
 }
 
+// Formato documento: { id, userId, data } — identico a quanto faceva Firestore.
+interface ChatDoc {
+    id: string;
+    userId: string;
+    data: SavedChat;
+}
+
+const currentUid = (): string | undefined => useAuthStore.getState().user?.id;
+
 export const useChatStore = create<ChatState>((set, get) => ({
     savedChats: [],
     activeChatId: null,
@@ -37,8 +40,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     chatHistory: [],
 
     initChats: (userId) => {
-        const unsub = onSnapshot(collection(db, `users/${userId}/chats`), (snapshot) => {
-            set({ savedChats: snapshot.docs.map(doc => doc.data().data as SavedChat) });
+        const unsub = subscribeCollection<ChatDoc>(`users/${userId}/chats`, (rows) => {
+            set({ savedChats: rows.map(row => row.data) });
         });
         return unsub;
     },
@@ -98,10 +101,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 }
 
                 const isTransient = 
-                    err.message?.includes("503") || 
-                    err.message?.includes("high demand") || 
-                    err.message?.includes("UNAVAILABLE") || 
-                    err.message?.includes("429") || 
+                    err.message?.includes("503") ||
+                    err.message?.includes("high demand") ||
+                    err.message?.includes("UNAVAILABLE") ||
+                    err.message?.includes("429") ||
                     err.message?.includes("RESOURCE_EXHAUSTED");
                 if (isTransient && attempt < 3) {
                     await new Promise(resolve => setTimeout(resolve, attempt * 1000));
@@ -126,7 +129,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const { chatHistory, activeChatId, savedChats } = get();
         const { showNotification } = useUIStore.getState();
         const { activeVehicle } = useGarageStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (chatHistory.length === 0 || !userId) return;
 
         if (activeChatId) {
@@ -134,10 +137,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             if (existing) {
                 const updatedChat = { ...existing, history: [...chatHistory], timestamp: new Date().toISOString() };
                 try {
-                    await setDoc(doc(db, `users/${userId}/chats`, updatedChat.id), { id: updatedChat.id, userId, data: updatedChat });
+                    await upsertDoc(`users/${userId}/chats`, updatedChat.id, { id: updatedChat.id, userId, data: updatedChat });
                     showNotification("Conversazione aggiornata.");
                 } catch (e: any) {
-                    handleFirestoreError(e, OperationType.WRITE, `users/${userId}/chats/${updatedChat.id}`);
+                    showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/chats/${updatedChat.id}`), "error");
                 }
             }
         } else {
@@ -149,11 +152,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 history: [...chatHistory]
             };
             try {
-                await setDoc(doc(db, `users/${userId}/chats`, newId), { id: newId, userId, data: newChat });
+                await upsertDoc(`users/${userId}/chats`, newId, { id: newId, userId, data: newChat });
                 set({ activeChatId: newId });
                 showNotification("Conversazione salvata.");
             } catch (e: any) {
-                handleFirestoreError(e, OperationType.WRITE, `users/${userId}/chats/${newId}`);
+                showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/chats/${newId}`), "error");
             }
         }
     },
@@ -167,14 +170,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     deleteSavedChat: async (id) => {
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         try {
-            await deleteDoc(doc(db, `users/${userId}/chats`, id));
+            await removeDoc(`users/${userId}/chats`, id);
             if (get().activeChatId === id) set({ activeChatId: null });
             showNotification("Conversazione eliminata.");
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/chats/${id}`);
+            showNotification(handleDataError(e, OperationType.DELETE, `users/${userId}/chats/${id}`), "error");
         }
     }
 }));

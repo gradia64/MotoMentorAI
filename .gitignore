@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Segreti: mai committare (inclusa la chiave Gemini se impostata via env in dev)
+.env
+
+# Output pacchettizzazione Electron
+release/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -2,10 +2,10 @@
 import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import './src/index.css';
 
 // --- Error Boundary Component ---
 interface ErrorBoundaryProps {
-  // Made optional to satisfy strict attribute checks on usage <ErrorBoundary>...</ErrorBoundary>
   children?: ReactNode;
 }
 
@@ -14,23 +14,11 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
-// Fix: Use React.Component explicitly and property initialization for state and props to resolve TS errors
-// where 'state' and 'props' were reported as missing from ErrorBoundary.
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Explicitly declare state and props to resolve inference issues in this environment.
   public state: ErrorBoundaryState = {
     hasError: false,
     error: undefined,
   };
-
-  // Fix for: Property 'props' does not exist on type 'ErrorBoundary'
-  public props: ErrorBoundaryProps;
-
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    // Explicitly initialize props on the instance to ensure visibility to the TS compiler
-    this.props = props;
-  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     // Update state so the next render will show the fallback UI.
@@ -43,7 +31,6 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   render(): ReactNode {
-    // Accessing state which is now correctly declared on the class.
     if (this.state.hasError) {
       // Custom fallback UI
       return (
@@ -67,7 +54,6 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       );
     }
 
-    // Accessing props which is now correctly declared on the class.
     return this.props.children;
   }
 }
@@ -87,21 +73,6 @@ root.render(
   </React.StrictMode>
 );
 
-// --- PWA Service Worker Registration ---
-// Disattivato nel preview environment di AI Studio per problemi di compatibilità con gli iframe
-const isAIStudioPreview = window.location.hostname.includes('europe-west2.run.app') || window.location.hostname.includes('aistudio.google.com');
-
-if ('serviceWorker' in navigator && !isAIStudioPreview) {
-  window.addEventListener('load', () => {
-    // Use relative path with explicit scope to handle preview environments better
-    navigator.serviceWorker.register('./service-worker.js', { scope: './' })
-      .then((registration) => {
-        console.log('ServiceWorker registration successful');
-      })
-      .catch((error) => {
-        console.log('ServiceWorker registration failed: ', error);
-      });
-  });
-} else if (isAIStudioPreview) {
-  console.log('ServiceWorker disattivato in modalità Preview AI Studio.');
-}
+// Nota: la registrazione del Service Worker (PWA) e' stata rimossa: l'app gira
+// come desktop Electron su file locale e la PWA non ha senso in questo contesto.
+// I dati sono persistenti nel DB locale (~/.config/MotoMentorAI/motomentor.db).

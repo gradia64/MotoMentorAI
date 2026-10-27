@@ -1,16 +1,10 @@
 
 import { create } from 'zustand';
-import { db, auth } from '../firebase';
-import { 
-    collection, 
-    onSnapshot, 
-    doc, 
-    setDoc, 
-    deleteDoc 
-} from 'firebase/firestore';
+import { subscribeCollection, upsertDoc, removeDoc } from '../local/client';
 import { GarageVehicle } from '../../types';
 import { useUIStore } from './useUIStore';
-import { handleFirestoreError, OperationType } from '../utils/firestoreErrors';
+import { useAuthStore } from './useAuthStore';
+import { handleDataError, OperationType } from '../utils/dataErrors';
 import { getVehicleSpecs } from '../../services/geminiService';
 
 interface DeadlineAlert {
@@ -38,6 +32,9 @@ interface GarageState {
     handleGenerateSpecs: (model: string, year: string) => Promise<any>;
 }
 
+// UID della sessione locale corrente (unica fonte di verita': lo store auth).
+const currentUid = (): string | undefined => useAuthStore.getState().user?.id;
+
 export const useGarageStore = create<GarageState>((set, get) => ({
     garageVehicles: [],
     activeVehId: (typeof window !== 'undefined' ? localStorage.getItem('motomentor_active_vehicle') : null),
@@ -45,8 +42,9 @@ export const useGarageStore = create<GarageState>((set, get) => ({
     deadlineAlerts: [],
 
     initGarage: (userId) => {
-        const unsub = onSnapshot(collection(db, `users/${userId}/vehicles`), (snapshot) => {
-            const vehicles = snapshot.docs.map(doc => doc.data() as GarageVehicle);
+        // Semantica identica a onSnapshot: caricamento iniziale + aggiornamento
+        // ad ogni write sulla collection (il main invia 'db:changed').
+        const unsub = subscribeCollection<GarageVehicle>(`users/${userId}/vehicles`, (vehicles) => {
             set({ garageVehicles: vehicles });
             
             // Update active vehicle if context changes
@@ -56,7 +54,7 @@ export const useGarageStore = create<GarageState>((set, get) => ({
             
             // Re-calculate alerts
             get().calculateAlerts();
-        }, (error) => console.error("Firestore Listen Error (vehicles):", error));
+        });
         
         return unsub;
     },
@@ -106,42 +104,42 @@ export const useGarageStore = create<GarageState>((set, get) => ({
 
     addVehicle: async (v) => {
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         const newVeh = { ...v, id: crypto.randomUUID(), userId };
         try {
-            await setDoc(doc(db, `users/${userId}/vehicles`, newVeh.id), newVeh);
+            await upsertDoc(`users/${userId}/vehicles`, newVeh.id, newVeh);
             showNotification("Moto aggiunta al garage!");
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/vehicles/${newVeh.id}`);
+            showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/vehicles/${newVeh.id}`), "error");
         }
     },
 
     updateVehicle: async (updated) => {
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         try {
-            await setDoc(doc(db, `users/${userId}/vehicles`, updated.id), updated);
+            await upsertDoc(`users/${userId}/vehicles`, updated.id, updated);
             showNotification("Dati veicolo aggiornati.");
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.WRITE, `users/${userId}/vehicles/${updated.id}`);
+            showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/vehicles/${updated.id}`), "error");
         }
     },
 
     deleteVehicle: async (id) => {
         const { showNotification } = useUIStore.getState();
-        const userId = auth.currentUser?.uid;
+        const userId = currentUid();
         if (!userId) return;
         try {
-            await deleteDoc(doc(db, `users/${userId}/vehicles`, id));
+            await removeDoc(`users/${userId}/vehicles`, id);
             if (get().activeVehId === id) {
                 set({ activeVehId: null, activeVehicle: null });
                 localStorage.removeItem('motomentor_active_vehicle');
             }
             showNotification("Veicolo rimosso.");
         } catch (e: any) {
-            handleFirestoreError(e, OperationType.DELETE, `users/${userId}/vehicles/${id}`);
+            showNotification(handleDataError(e, OperationType.DELETE, `users/${userId}/vehicles/${id}`), "error");
         }
     },
 
@@ -164,4 +162,3 @@ export const useGarageStore = create<GarageState>((set, get) => ({
         }
     }
 }));
-

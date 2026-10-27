@@ -1,15 +1,10 @@
 // --- PDF Generation Utility ---
 // Centralizes PDF creation logic and adds a crucial safety check.
+// jsPDF e' ora una dipendenza npm (bundle locale, niente CDN): l'app desktop
+// genera i PDF anche completamente offline.
+import { jsPDF } from 'jspdf';
 
-// This function checks if the external jspdf library is available on the window object.
-// If not, it throws an error, preventing the app from crashing and providing a clear
-// message to the developer or user about the missing dependency.
-const getPdfInstance = () => {
-    if (window.jspdf && window.jspdf.jsPDF) {
-        return new window.jspdf.jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-    }
-    throw new Error("La libreria per la generazione dei PDF (jsPDF) non è stata caricata correttamente.");
-};
+const getPdfInstance = () => new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
 // Generic PDF generation function that can be used for any document type.
 // It abstracts the boilerplate code for creating a PDF and handling text wrapping.
@@ -56,7 +51,11 @@ export const generatePdf = (
         const textWidth = pageWidth - margin * 2 - (isListItem ? 5 : 0);
         
         pdf.setFontSize(size);
-        pdf.setTextColor(...color);
+        {
+            // setTextColor richiede 3 argomenti fissi: spacchettiamo con default.
+            const [r = 80, g = 80, b = 80] = color ?? [];
+            pdf.setTextColor(r, g, b);
+        }
 
         const lines = pdf.splitTextToSize(textToRender, textWidth);
         // Correctly calculate line height in the document's units (mm).

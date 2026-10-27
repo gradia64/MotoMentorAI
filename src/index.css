@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Animazioni custom usate dall'app.
+ * Prima erano classi no-op dipendenti dal CDN Tailwind; ora che lo stile e'
+ * compilato in build vengono definite davvero (miglioria visiva).
+ */
+@keyframes motomentor-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes motomentor-fade-in-up {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes motomentor-bounce-subtle {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-4px); }
+}
+
+.animate-fade-in {
+    animation: motomentor-fade-in 0.5s ease-out both;
+}
+
+.animate-fade-in-up {
+    animation: motomentor-fade-in-up 0.6s ease-out both;
+}
+
+.animate-bounce-subtle {
+    animation: motomentor-bounce-subtle 1.4s ease-in-out infinite;
+}
