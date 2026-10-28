@@ -17,6 +17,7 @@ import { createNavigationSegments, generateGpxFile, generateFullTripGpx, downloa
 import { useEscapeKey } from '../../src/utils/hooks';
 import SegmentNavigator from './SegmentNavigator';
 import Tooltip from '../../components/Tooltip';
+import GeneratedByNote from '../../components/GeneratedByNote';
 import { MAX_AI_IMAGES_BYTES, imagesTooLargeMessage } from '../../services/geminiService';
 
 // --- CONSTANTS ---
@@ -552,6 +553,7 @@ const TripPlanner: React.FC = () => {
                                 </div>
                             ))}
                         </div>
+                        <GeneratedByNote model={itinerary.generatedBy} />
                     </div>
                 </div>
             )}

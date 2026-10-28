@@ -5,7 +5,7 @@ import { GarageVehicle } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useAuthStore } from './useAuthStore';
 import { handleDataError, OperationType } from '../utils/dataErrors';
-import { getVehicleSpecs } from '../../services/geminiService';
+import { getVehicleSpecs, formatGeminiError } from '../../services/geminiService';
 import { parseLocalDate } from '../utils/hooks';
 import { pickActiveVehicleId } from '../utils/garage';
 
@@ -192,7 +192,7 @@ export const useGarageStore = create<GarageState>((set, get) => ({
         try {
             return await getVehicleSpecs(model, year);
         } catch (err: any) {
-            showNotification("Errore ricerca dati tecnici.", "error");
+            showNotification(`Errore ricerca dati tecnici: ${formatGeminiError(err)}`, "error");
             return null;
         }
     },

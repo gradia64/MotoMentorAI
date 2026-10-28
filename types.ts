@@ -66,6 +66,9 @@ export interface Itinerary {
     tripTitle: string;
     generalDescription: string;
     dailySchedule: Day[];
+    // Modello IA che ha generato l'itinerario (es. "gemini-3.6-flash").
+    // Assente nei viaggi creati prima del campo.
+    generatedBy?: string;
 }
 
 export interface MaintenanceTips {

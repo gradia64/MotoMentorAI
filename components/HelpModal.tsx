@@ -93,6 +93,7 @@ const SECTIONS: HelpSection[] = [
                     <><B>Mappa Viaggio</B> offre una <B>Panoramica Veloce</B> su Google Maps, la <B>Navigazione Dettagliata</B> (il percorso diviso in segmenti, ognuno in una scheda del browser) e lo scaricamento del file <B>GPX</B> completo per il navigatore.</>,
                     <>Ogni tappa ha la propria mappa e il proprio file GPX.</>,
                     <><B>Condividi</B> esporta il viaggio in un file .mmt.json (vedi <B>Viaggi condivisi</B>).</>,
+                    <>In fondo al viaggio (e nel PDF) è indicato il modello IA che l'ha pianificato.</>,
                 ]} />
             </>
         ),
@@ -194,7 +195,7 @@ const SECTIONS: HelpSection[] = [
                     <>Inseriscila dall'icona a forma di chiave nell'intestazione, oppure da <B>Configura chiave API Gemini</B> nella schermata di accesso, e premi <B>Salva chiave</B>.</>,
                     <>La chiave resta solo su questo computer, nel file ~/.config/MotoMentorAI/gemini.key, leggibile solo dal tuo utente.</>,
                 ]} />
-                <P>Se un messaggio indica che i server di Gemini sono carichi o che è stato raggiunto il limite di richieste, riprova dopo qualche istante.</P>
+                <P>L'app usa i modelli Gemini Flash, disponibili con il piano gratuito. Se il più recente è sovraccarico passa da sola a quello precedente. Se un messaggio indica che i server di Gemini sono carichi o che è stato raggiunto il limite di richieste, riprova dopo qualche istante.</P>
             </>
         ),
     },

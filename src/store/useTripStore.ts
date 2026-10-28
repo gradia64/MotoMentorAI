@@ -5,11 +5,11 @@ import { Itinerary, SavedTrip, SharedTrip } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useGarageStore } from './useGarageStore';
 import { useAuthStore } from './useAuthStore';
-import { generateItinerary, generateTripDiarySummary } from '../../services/geminiService';
+import { generateItinerary, generateTripDiarySummary, formatGeminiError } from '../../services/geminiService';
 import { generatePdf } from '../utils/pdf';
 import { downloadFile } from '../utils/mapsHelpers';
 import { handleDataError, OperationType } from '../utils/dataErrors';
-import { normalizeSavedTrip } from '../utils/itinerary';
+import { normalizeSavedTrip, formatModelName } from '../utils/itinerary';
 
 interface TripState {
     tripHistory: SavedTrip[];
@@ -101,7 +101,7 @@ export const useTripStore = create<TripState>((set, get) => ({
             set({ itinerary, activeTripId: null });
             showNotification("Itinerario calcolato!");
         } catch (err: any) {
-            showNotification(err.message || "Errore calcolo viaggio.", "error");
+            showNotification(formatGeminiError(err) || "Errore calcolo viaggio.", "error");
         } finally {
             setLoading('isGeneratingItinerary', false);
         }
@@ -229,7 +229,7 @@ export const useTripStore = create<TripState>((set, get) => ({
                 showNotification("Racconto generato!");
             }
         } catch (e) {
-            showNotification("Errore generazione racconto.", "error");
+            showNotification(`Errore generazione racconto: ${formatGeminiError(e)}`, "error");
         } finally {
             setLoading('isGeneratingDiarySummary', false);
         }
@@ -258,6 +258,10 @@ export const useTripStore = create<TripState>((set, get) => ({
                             addWrappedText(`TAPPA ${day.day}: ${day.stageTitle.toUpperCase()}`, { size: 14, color: [37, 99, 235], marginBottom: 5 });
                             addWrappedText(day.routeDescription, { size: 11, marginBottom: 6 });
                         });
+                        if (itinerary.generatedBy) {
+                            addSeparator({ marginTop: 8, marginBottom: 4 });
+                            addWrappedText(`Viaggio pianificato da ${formatModelName(itinerary.generatedBy)}`, { size: 9, color: [107, 114, 128], marginBottom: 0 });
+                        }
                     }
                 );
             } catch (error) {

@@ -17,6 +17,7 @@ import WeatherIcon from '../../components/WeatherIcon';
 import InfoBlock from '../../components/InfoBlock';
 import { downloadFile, generateGpxFile } from '../../src/utils/mapsHelpers';
 import ActionButton from '../../components/ActionButton';
+import { formatModelName } from '../../src/utils/itinerary';
 import { motion } from 'motion/react';
 
 interface SharedTripViewProps {
@@ -205,8 +206,11 @@ const SharedTripView: React.FC<SharedTripViewProps> = ({ id, trip, onBack }) => 
 
                 {/* Footer Section */}
                 <div className="p-8 bg-black/20 border-t border-gray-700/50 text-center">
-                    <p className="text-gray-500 text-xs mb-4">Itinerario generato con MotoMentor AI assistant.</p>
-                    <ActionButton onClick={onBack}>Crea il tuo Itinerario Personaizzato</ActionButton>
+                    <p className="text-gray-500 text-xs mb-4">
+                        Itinerario generato con MotoMentor AI assistant
+                        {obj.itinerary.generatedBy ? ` · pianificato da ${formatModelName(obj.itinerary.generatedBy)}` : ''}.
+                    </p>
+                    <ActionButton onClick={onBack}>Crea il tuo Itinerario Personalizzato</ActionButton>
                 </div>
             </div>
         </div>

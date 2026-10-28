@@ -6,7 +6,7 @@ import { useUIStore } from './useUIStore';
 import { useGarageStore } from './useGarageStore';
 import { useTripStore } from './useTripStore';
 import { useAuthStore } from './useAuthStore';
-import { diagnoseProblem, getMaintenanceTips, scanReceiptImage } from '../../services/geminiService';
+import { diagnoseProblem, getMaintenanceTips, scanReceiptImage, formatGeminiError } from '../../services/geminiService';
 import { generatePdf } from '../utils/pdf';
 import { handleDataError, OperationType } from '../utils/dataErrors';
 import { formatLocalDate, localDateTime } from '../utils/hooks';
@@ -101,7 +101,7 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
             const res = await diagnoseProblem(draft.problemDescription, activeVehicle!, draft.problemImage!);
             set({ diagnosis: res, activeDiagnosisId: null });
         } catch (e: any) {
-            showNotification(e.message, "error");
+            showNotification(formatGeminiError(e), "error");
         } finally {
             setLoading('isDiagnosingProblem', false);
         }
@@ -120,7 +120,7 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
             const tips = await getMaintenanceTips(lastTrip, activeVehicle!);
             set({ maintenanceTips: tips });
         } catch (e: any) {
-            showNotification(e.message, "error");
+            showNotification(formatGeminiError(e), "error");
         } finally {
             setLoading('isGeneratingChecklist', false);
         }
@@ -232,7 +232,7 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
             const data = await scanReceiptImage(image);
             return data;
         } catch (err: any) {
-            showNotification("Errore durante la scansione dello scontrino.", "error");
+            showNotification(`Errore durante la scansione dello scontrino: ${formatGeminiError(err)}`, "error");
             return null;
         } finally {
             setLoading('isScanningReceipt', false);

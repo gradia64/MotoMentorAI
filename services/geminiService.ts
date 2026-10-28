@@ -2,8 +2,12 @@ import { GoogleGenAI, Chat, Content } from "@google/genai";
 import { ITINERARY_SCHEMA, Itinerary, Day, MAINTENANCE_TIPS_SCHEMA, MaintenanceTips, GarageVehicle, VEHICLE_SPECS_SCHEMA, DiaryEntry, RECEIPT_SCAN_SCHEMA, ScannedReceiptData } from '../types';
 import { todayLocalISO } from '../src/utils/hooks';
 
-export const PRIMARY_MODEL = 'gemini-3.7-flash';
-export const FALLBACK_MODEL = 'gemini-3.5-flash';
+// Catena dei modelli, dal più recente al più collaudato: si passa al successivo
+// solo per errori transitori o modello non disponibile (isTransientGeminiError).
+// Tutti Flash: i Pro hanno quota zero sul piano gratuito dell'API (verificato
+// il 2026-10-28), quindi ogni richiesta finirebbe comunque in fallback.
+export const MODEL_CHAIN = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'] as const;
+export const PRIMARY_MODEL = MODEL_CHAIN[0];
 
 // Errori per cui ha senso riprovare con il modello di fallback: transitori
 // (503/429/overload) o modello non disponibile (404/not found). Per gli altri
@@ -125,52 +129,83 @@ const cleanJsonString = (text: string): string => {
     return cleaned;
 };
 
-const apiProxy = async (model: string, contents: any, config?: any) => {
-    try {
-        const ai = getAi();
-        const response = await ai.models.generateContent({ model, contents, config });
-        const rawText = response.text || "";
-        const cleanedText = cleanJsonString(rawText);
-        if (!cleanedText) throw new Error("L'IA ha restituito una risposta vuota.");
-        
-        try {
-            return JSON.parse(cleanedText);
-        } catch (parseError: any) {
-            console.error("JSON Parse Error. Raw text:", rawText);
-            throw new Error(`Errore di sintassi nella risposta dell'IA: ${parseError.message}`);
-        }
-    } catch (e: any) {
-        console.error(`Gemini API Error (${model}):`, e);
+// Esegue la richiesta sul primo modello della catena e, se è sovraccarico o non
+// disponibile, sui successivi. Gli altri errori (chiave non valida, JSON
+// malformato…) si ripresenterebbero identici: si interrompe subito.
+// Un modello sovraccarico a volte non risponde con un errore ma resta in attesa
+// per minuti (misurati 279 s su gemini-3.7-flash il 2026-10-28): oltre il tempo
+// massimo la richiesta viene annullata e si passa al modello successivo.
+const DEFAULT_TIMEOUT_MS = 60_000;
+// L'itinerario è un JSON lungo (tappe, tracciati GPS): serve più tempo.
+const ITINERARY_TIMEOUT_MS = 180_000;
 
-        // Fallback automatico su FALLBACK_MODEL solo per errori transitori o
-        // modello non disponibile (503, 429, 404, overload).
-        if (model === PRIMARY_MODEL && isTransientGeminiError(e)) {
-            console.warn(`Fallback da ${PRIMARY_MODEL} a ${FALLBACK_MODEL}...`);
-            return await apiProxy(FALLBACK_MODEL, contents, config);
-        }
+// Il sovraccarico è a ondate (misurato: tutta la catena in 503 e, un minuto
+// dopo, gemini-3.6-flash di nuovo libero): se tutti i modelli sono occupati si
+// attende un poco e si ripercorre la catena.
+const CHAIN_RETRY_DELAYS_MS = [5_000];
 
-        if (e.message?.includes("Requested entity was not found")) {
-            throw new Error("Modello non trovato o non accessibile.");
+const withModelFallback = async <T>(
+    label: string,
+    run: (model: string, abortSignal: AbortSignal) => Promise<T>,
+    timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<T> => {
+    let lastError: any;
+    for (let round = 0; round <= CHAIN_RETRY_DELAYS_MS.length; round++) {
+        if (round > 0) {
+            console.warn(`Tutti i modelli occupati: nuovo tentativo tra ${CHAIN_RETRY_DELAYS_MS[round - 1] / 1000} s...`);
+            await new Promise(resolve => setTimeout(resolve, CHAIN_RETRY_DELAYS_MS[round - 1]));
         }
-        
-        throw e;
+        for (const model of MODEL_CHAIN) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await run(model, controller.signal);
+            } catch (e: any) {
+                const timedOut = controller.signal.aborted;
+                if (timedOut) {
+                    e = new Error(`Il modello ${model} non ha risposto entro ${Math.round(timeoutMs / 1000)} secondi.`);
+                }
+                console.error(`Gemini ${label} Error (${model}):`, e);
+                lastError = e;
+                if (!timedOut && !isTransientGeminiError(e)) {
+                    if (e?.message?.includes("Requested entity was not found")) {
+                        throw new Error("Modello non trovato o non accessibile.");
+                    }
+                    throw e;
+                }
+                console.warn(`Fallback ${label}: ${model} non disponibile, provo il modello successivo...`);
+            } finally {
+                clearTimeout(timer);
+            }
+        }
     }
+    throw lastError;
 };
 
-const textApiProxy = async (model: string, contents: any, config?: any) => {
+// Risposta JSON + modello che l'ha davvero prodotta (modelVersion: tiene conto
+// del fallback e degli alias, es. gemini-3.5-flash servito da gemini-3.6-flash).
+const generateJson = (contents: any, config?: any, timeoutMs?: number) => withModelFallback('API', async (model, abortSignal) => {
+    const ai = getAi();
+    const response = await ai.models.generateContent({ model, contents, config: { ...config, abortSignal } });
+    const rawText = response.text || "";
+    const cleanedText = cleanJsonString(rawText);
+    if (!cleanedText) throw new Error("L'IA ha restituito una risposta vuota.");
+
     try {
-         const ai = getAi();
-         const response = await ai.models.generateContent({ model, contents, config });
-         return response.text || "Nessuna risposta generata.";
-    } catch (e: any) {
-         console.error(`Gemini Text API Error (${model}):`, e);
-         if (model === PRIMARY_MODEL && isTransientGeminiError(e)) {
-             console.warn(`Fallback testo da ${PRIMARY_MODEL} a ${FALLBACK_MODEL}...`);
-             return await textApiProxy(FALLBACK_MODEL, contents, config);
-         }
-         throw e;
+        return { data: JSON.parse(cleanedText), modelVersion: response.modelVersion || model };
+    } catch (parseError: any) {
+        console.error("JSON Parse Error. Raw text:", rawText);
+        throw new Error(`Errore di sintassi nella risposta dell'IA: ${parseError.message}`);
     }
-};
+}, timeoutMs);
+
+const apiProxy = async (contents: any, config?: any) => (await generateJson(contents, config)).data;
+
+const textApiProxy = (contents: any, config?: any) => withModelFallback('testo', async (model, abortSignal) => {
+    const ai = getAi();
+    const response = await ai.models.generateContent({ model, contents, config: { ...config, abortSignal } });
+    return response.text || "Nessuna risposta generata.";
+});
 
 const mapApiItineraryToAppItinerary = (apiResponse: any): Itinerary => {
     return {
@@ -240,8 +275,8 @@ REGOLE JSON: Restituisci esclusivamente l'oggetto JSON richiesto secondo ITINERA
         }
     }
 
-    const response = await apiProxy(PRIMARY_MODEL, { parts }, config);
-    return mapApiItineraryToAppItinerary(response);
+    const { data, modelVersion } = await generateJson({ parts }, config, ITINERARY_TIMEOUT_MS);
+    return { ...mapApiItineraryToAppItinerary(data), generatedBy: modelVersion };
 };
 
 export const diagnoseProblem = async (problemDescription: string, motorcycle: GarageVehicle, image?: File): Promise<string> => {
@@ -255,13 +290,13 @@ Esegui un'analisi tecnica dettagliata.`;
         const base64Data = await fileToBase64(image);
         parts.push({ inlineData: { data: base64Data, mimeType: image.type } });
     }
-    return await textApiProxy(PRIMARY_MODEL, { parts });
+    return await textApiProxy({ parts });
 };
 
 export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: GarageVehicle): Promise<MaintenanceTips> => {
     const prompt = `Checklist pre-viaggio per ${motorcycle.model} destinazione ${itinerary.tripTitle}.`;
     const config = { responseMimeType: "application/json", responseSchema: MAINTENANCE_TIPS_SCHEMA };
-    const response = await apiProxy(PRIMARY_MODEL, { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy({ parts: [{ text: prompt }] }, config);
     return {
         essentialChecks: response.controlli_essenziali || [],
         tripSpecificTips: response.suggerimenti_specifici_viaggio || [],
@@ -272,13 +307,13 @@ export const getMaintenanceTips = async (itinerary: Itinerary, motorcycle: Garag
 export const generateTripDiarySummary = async (itinerary: Itinerary, entries: DiaryEntry[]): Promise<string> => {
     const diaryContent = entries.map(e => `Giorno ${e.day}: "${e.content}"`).join('\n');
     const prompt = `Scrivi il racconto epico del viaggio "${itinerary.tripTitle}" basandoti su queste note: ${diaryContent}.`;
-    return await textApiProxy(PRIMARY_MODEL, { parts: [{ text: prompt }] });
+    return await textApiProxy({ parts: [{ text: prompt }] });
 };
 
 export const getVehicleSpecs = async (model: string, year: string) => {
     const prompt = `Restituisci i dati tecnici ufficiali per la moto ${model} (${year}). Assicurati di restituire un JSON valido e che tutti i valori numerici includano l'unità di misura e siano racchiusi tra virgolette come stringhe (es. "776 cc", "84 CV").`;
     const config = { responseMimeType: "application/json", responseSchema: VEHICLE_SPECS_SCHEMA };
-    const response = await apiProxy(PRIMARY_MODEL, { parts: [{ text: prompt }] }, config);
+    const response = await apiProxy({ parts: [{ text: prompt }] }, config);
     return {
         displacement: response.cilindrata || '',
         power: response.potenza || '',
@@ -309,7 +344,7 @@ export const sendDirectChatMessage = async (
 ): Promise<string> => {
     const systemInstruction = `Sei MotoMentor, l'assistente definitivo per motociclisti. ${vehicle ? `Aiuta l'utente con la sua ${vehicle.model}.` : ''}`;
     const contents: any[] = [...history, { role: 'user', parts: [{ text: newMessage }] }];
-    return await textApiProxy(PRIMARY_MODEL, contents, { systemInstruction });
+    return await textApiProxy(contents, { systemInstruction });
 };
 
 export const scanReceiptImage = async (image: File): Promise<ScannedReceiptData> => {
@@ -319,7 +354,7 @@ export const scanReceiptImage = async (image: File): Promise<ScannedReceiptData>
     assertImagesSize([image]);
     const base64Data = await fileToBase64(image);
 
-    const response = await apiProxy(PRIMARY_MODEL, { 
+    const response = await apiProxy({ 
         parts: [
             { text: prompt },
             { inlineData: { data: base64Data, mimeType: image.type } }

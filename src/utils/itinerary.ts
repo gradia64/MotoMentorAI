@@ -51,8 +51,19 @@ export const normalizeItinerary = (raw: any): Itinerary | null => {
         tripTitle: str(raw.tripTitle, 'Viaggio Senza Titolo'),
         generalDescription: str(raw.generalDescription),
         dailySchedule: raw.dailySchedule.filter((d: unknown) => d && typeof d === 'object').map(normalizeDay),
+        ...(typeof raw.generatedBy === 'string' && raw.generatedBy.trim()
+            ? { generatedBy: raw.generatedBy.trim().slice(0, 80) }
+            : {}),
     };
 };
+
+// "gemini-3.6-flash" → "Gemini 3.6 Flash", per la nota sotto al viaggio.
+export const formatModelName = (id: string): string =>
+    id.replace(/^models\//, '')
+        .split('-')
+        .filter(Boolean)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
 
 export const normalizeSavedTrip = (raw: any): SavedTrip | null => {
     if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id) return null;
