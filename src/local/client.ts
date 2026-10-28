@@ -2,7 +2,7 @@
 // Espone le stesse operazioni usate prima con Firestore (subscribe/upsert/remove),
 // piu' auth e gestione chiave Gemini. Tutto passa dall'IPC Electron.
 
-import type { LocalDBBridge, LocalSession, SharedTrip } from './types';
+import type { LocalDBBridge, LocalSession, SharedTrip, PlanningProvider, PlanningStatus, PlanningModel, PlanTripRequest, PlanTripResult } from './types';
 import type { SharedTrip as AppSharedTrip } from '../../types';
 
 function bridge(): LocalDBBridge {
@@ -70,6 +70,16 @@ export const saveSharedTripFile = (trip: AppSharedTrip): Promise<boolean> =>
 
 export const openSharedTripFile = (): Promise<AppSharedTrip> =>
   call(bridge().openSharedTrip()) as Promise<AppSharedTrip>;
+
+// --- Pianificazione viaggi con un fornitore a pagamento (facoltativo) ---
+export const getPlanningStatus = (): Promise<PlanningStatus> => call(bridge().planningStatus());
+export const savePlanning = (provider: PlanningProvider, key: string, model: PlanningModel): Promise<boolean> =>
+  call(bridge().savePlanning(provider, key, model));
+export const disablePlanning = (): Promise<boolean> => call(bridge().disablePlanning());
+export const clearPlanningKey = (provider: PlanningProvider): Promise<boolean> => call(bridge().clearPlanningKey(provider));
+export const listPlanningModels = (provider: PlanningProvider, key?: string): Promise<PlanningModel[]> =>
+  call(bridge().listPlanningModels(provider, key));
+export const planTripWithProvider = (request: PlanTripRequest): Promise<PlanTripResult> => call(bridge().planTrip(request));
 
 export const onOpenHelp = (cb: () => void): (() => void) => bridge().onOpenHelp(cb);
 

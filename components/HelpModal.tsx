@@ -94,6 +94,7 @@ const SECTIONS: HelpSection[] = [
                     <>Ogni tappa ha la propria mappa e il proprio file GPX.</>,
                     <><B>Condividi</B> esporta il viaggio in un file .mmt.json (vedi <B>Viaggi condivisi</B>).</>,
                     <>In fondo al viaggio (e nel PDF) è indicato il modello IA che l'ha pianificato.</>,
+                    <>Per itinerari più accurati puoi far pianificare i viaggi a un modello a pagamento di OpenRouter o DeepSeek (vedi <B>Chiave API Gemini</B>).</>,
                 ]} />
             </>
         ),
@@ -195,6 +196,16 @@ const SECTIONS: HelpSection[] = [
                     <>Inseriscila dall'icona a forma di chiave nell'intestazione, oppure da <B>Configura chiave API Gemini</B> nella schermata di accesso, e premi <B>Salva chiave</B>.</>,
                     <>La chiave resta solo su questo computer, nel file ~/.config/MotoMentorAI/gemini.key, leggibile solo dal tuo utente.</>,
                 ]} />
+                <H>Pianificazione viaggi a pagamento (facoltativo)</H>
+                <L items={[
+                    <>Nelle Impostazioni, sezione <B>Pianificazione viaggi con un modello a pagamento</B>, scegli il fornitore: <B>OpenRouter</B> (Claude, GPT, Gemini Pro e molti altri, con una sola chiave) oppure <B>DeepSeek</B>.</>,
+                    <>Inserisci la chiave del fornitore (con DeepSeek premi poi <B>Carica modelli</B>), scegli il modello e premi <B>Usa per i viaggi</B>. Per OpenRouter l'elenco riporta il prezzo per milione di token.</>,
+                    <>Da quel momento solo <B>Crea Itinerario</B> usa il modello scelto; chat, diagnosi e le altre funzioni restano su Gemini gratuito. Con OpenRouter al termine compare il costo della pianificazione.</>,
+                    <>Il viaggio viene pianificato con Gemini, con un avviso, se il fornitore non risponde (credito esaurito, modello non disponibile) o se alleghi screenshot a un modello segnato “niente immagini”.</>,
+                    <><B>Torna a Gemini</B> disattiva la pianificazione a pagamento; <B>Elimina chiave</B> cancella la chiave del fornitore da questo computer (le chiavi sono in ~/.config/MotoMentorAI).</>,
+                    <>Attenzione: gli abbonamenti personali (ChatGPT Plus, Claude Pro…) non includono l'accesso API; i fornitori si ricaricano a parte.</>,
+                ]} />
+                <H>Modelli Gemini</H>
                 <P>L'app usa i modelli Gemini Flash, disponibili con il piano gratuito. Se il più recente è sovraccarico passa da sola a quello precedente. Se un messaggio indica che i server di Gemini sono carichi o che è stato raggiunto il limite di richieste, riprova dopo qualche istante.</P>
             </>
         ),

@@ -57,13 +57,25 @@ export const normalizeItinerary = (raw: any): Itinerary | null => {
     };
 };
 
-// "gemini-3.6-flash" → "Gemini 3.6 Flash", per la nota sotto al viaggio.
-export const formatModelName = (id: string): string =>
-    id.replace(/^models\//, '')
+// Nome leggibile per la nota sotto al viaggio:
+// "gemini-3.6-flash" → "Gemini 3.6 Flash";
+// "openrouter:anthropic/claude-sonnet-5.5" → "Claude Sonnet 5.5 (via OpenRouter)";
+// "deepseek:deepseek-v4-pro" → "DeepSeek V4 Pro (via DeepSeek)".
+const PROVIDER_LABELS: Record<string, string> = { openrouter: 'OpenRouter', deepseek: 'DeepSeek' };
+const WORD_CASE: Record<string, string> = { gpt: 'GPT', deepseek: 'DeepSeek', glm: 'GLM' };
+
+export const formatModelName = (id: string): string => {
+    const match = id.match(/^([a-z]+):(.+)$/);
+    const provider = match && PROVIDER_LABELS[match[1]] ? PROVIDER_LABELS[match[1]] : null;
+    const bare = (provider ? match![2] : id).replace(/^models\//, '');
+    const name = (bare.split('/').pop() || bare)
+        .replace(/^~/, '')
         .split('-')
         .filter(Boolean)
-        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .map(w => WORD_CASE[w.toLowerCase()] ?? (w.charAt(0).toUpperCase() + w.slice(1)))
         .join(' ');
+    return provider ? `${name} (via ${provider})` : name;
+};
 
 export const normalizeSavedTrip = (raw: any): SavedTrip | null => {
     if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id) return null;

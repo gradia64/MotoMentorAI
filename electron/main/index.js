@@ -4,9 +4,10 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session } from 'electron';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { chmodSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import * as db from './db.js';
 import { isAppUrl, MAX_SHARED_TRIP_BYTES } from './security.js';
+import { isProvider, listPlanningModels, planTrip } from './planning.js';
 
 // Il main e' un modulo ES ("type":"module"): __dirname non esiste, si deriva
 // da import.meta.url (funziona anche dentro l'asar del pacchetto).
@@ -51,6 +52,66 @@ function saveGeminiKey(key) {
   // mode vale solo alla creazione: un file preesistente va riportato a 0600.
   chmodSync(p, 0o600);
   return true;
+}
+
+// --- Fornitori a pagamento (facoltativi, solo pianificazione dei viaggi) ---
+// Le chiavi restano nel main: il renderer sa solo quali sono configurate.
+
+function getProviderKeyPath(providerId) {
+  if (!isProvider(providerId)) throw new Error('Fornitore di pianificazione sconosciuto.');
+  return join(app.getPath('userData'), `${providerId}.key`);
+}
+
+function getAiSettingsPath() {
+  return join(app.getPath('userData'), 'ai-settings.json');
+}
+
+function readProviderKey(providerId) {
+  try {
+    const p = getProviderKeyPath(providerId);
+    if (existsSync(p)) return readFileSync(p, 'utf8').trim();
+  } catch (e) { /* ignore */ }
+  return '';
+}
+
+function readAiSettings() {
+  try {
+    const p = getAiSettingsPath();
+    if (existsSync(p)) {
+      const obj = JSON.parse(readFileSync(p, 'utf8'));
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) return obj;
+    }
+  } catch (e) { /* file illeggibile: impostazioni predefinite */ }
+  return {};
+}
+
+// Pianificazione attiva: { provider, model, modelName, vision } oppure null (solo Gemini).
+function readPlanning() {
+  const p = readAiSettings().planning;
+  return p && isProvider(p.provider) && typeof p.model === 'string' && p.model ? p : null;
+}
+
+function writeSecretFile(p, content) {
+  writeFileSync(p, content, { mode: 0o600 });
+  chmodSync(p, 0o600);
+}
+
+function writeAiSettings(settings) {
+  writeSecretFile(getAiSettingsPath(), JSON.stringify(settings, null, 2));
+}
+
+// Richiesta di pianificazione dal renderer: dati non fidati, si controlla la forma.
+function validatePlanRequest(request) {
+  const { prompt, images, schema } = request || {};
+  if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('Richiesta di pianificazione non valida.');
+  if (!schema || typeof schema !== 'object') throw new Error('Schema dell\'itinerario mancante.');
+  const list = Array.isArray(images) ? images : [];
+  for (const img of list) {
+    if (!img || typeof img.data !== 'string' || typeof img.mimeType !== 'string' || !/^image\//.test(img.mimeType)) {
+      throw new Error('Immagine allegata non valida.');
+    }
+  }
+  return { prompt, images: list, schema };
 }
 
 function broadcastChanged(path) {
@@ -168,6 +229,61 @@ function registerHandlers() {
 
   handle('config:geminiKey', () => readGeminiKey());
   handle('config:setGeminiKey', (_e, key) => { saveGeminiKey(key); return true; });
+
+  handle('planning:status', () => {
+    const planning = readPlanning();
+    return {
+      provider: planning?.provider ?? null,
+      model: planning?.model ?? null,
+      modelName: planning?.modelName ?? null,
+      vision: !!planning?.vision,
+      keys: { openrouter: !!readProviderKey('openrouter'), deepseek: !!readProviderKey('deepseek') },
+    };
+  });
+  // key vuota: si tiene quella già salvata (il renderer non la conosce).
+  handle('planning:save', (_e, providerId, key, model) => {
+    if (!isProvider(providerId)) throw new Error('Fornitore di pianificazione sconosciuto.');
+    if (!model || typeof model.id !== 'string' || !model.id.trim()) throw new Error('Scegli il modello per la pianificazione.');
+    const trimmed = typeof key === 'string' ? key.trim() : '';
+    if (trimmed) writeSecretFile(getProviderKeyPath(providerId), trimmed);
+    else if (!readProviderKey(providerId)) throw new Error('Inserisci la chiave del fornitore.');
+    writeAiSettings({
+      ...readAiSettings(),
+      planning: {
+        provider: providerId,
+        model: model.id.trim(),
+        modelName: typeof model.name === 'string' ? model.name.slice(0, 120) : model.id.trim(),
+        vision: model.vision === true,
+      },
+    });
+    return true;
+  });
+  // Torna a pianificare con Gemini; le chiavi salvate restano.
+  handle('planning:disable', () => {
+    writeAiSettings({ ...readAiSettings(), planning: null });
+    return true;
+  });
+  handle('planning:clearKey', (_e, providerId) => {
+    rmSync(getProviderKeyPath(providerId), { force: true });
+    if (readPlanning()?.provider === providerId) writeAiSettings({ ...readAiSettings(), planning: null });
+    return true;
+  });
+  // La chiave appena digitata (non ancora salvata) serve a DeepSeek per elencare i modelli.
+  handle('planning:models', (_e, providerId, key) => {
+    if (!isProvider(providerId)) throw new Error('Fornitore di pianificazione sconosciuto.');
+    const typed = typeof key === 'string' ? key.trim() : '';
+    return listPlanningModels(providerId, typed || readProviderKey(providerId));
+  });
+  handle('planning:planTrip', (_e, request) => {
+    const planning = readPlanning();
+    if (!planning) throw new Error('Nessun fornitore di pianificazione attivo.');
+    return planTrip({
+      ...validatePlanRequest(request),
+      providerId: planning.provider,
+      apiKey: readProviderKey(planning.provider),
+      model: planning.model,
+    });
+  });
 
   // Il renderer segnala di aver registrato i listener (in particolare
   // 'shared-trip:open'): consegna l'eventuale viaggio rimasto in coda.

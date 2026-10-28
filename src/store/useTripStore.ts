@@ -1,15 +1,16 @@
 
 import { create } from 'zustand';
-import { subscribeCollection, upsertDoc, removeDoc, listCollection, saveSharedTripFile } from '../local/client';
-import { Itinerary, SavedTrip, SharedTrip } from '../../types';
+import { subscribeCollection, upsertDoc, removeDoc, listCollection, saveSharedTripFile, getPlanningStatus, planTripWithProvider } from '../local/client';
+import { Itinerary, SavedTrip, SharedTrip, ITINERARY_SCHEMA } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useGarageStore } from './useGarageStore';
 import { useAuthStore } from './useAuthStore';
-import { generateItinerary, generateTripDiarySummary, formatGeminiError } from '../../services/geminiService';
+import { buildItineraryRequest, generateItinerary, generateTripDiarySummary, formatGeminiError, parseItineraryResponse, ItineraryRequest } from '../../services/geminiService';
 import { generatePdf } from '../utils/pdf';
 import { downloadFile } from '../utils/mapsHelpers';
 import { handleDataError, OperationType } from '../utils/dataErrors';
-import { normalizeSavedTrip, formatModelName } from '../utils/itinerary';
+import { normalizeSavedTrip, normalizeItinerary, formatModelName } from '../utils/itinerary';
+import { geminiToJsonSchema } from '../utils/jsonSchema';
 
 interface TripState {
     tripHistory: SavedTrip[];
@@ -74,6 +75,38 @@ interface TripDoc {
 
 const currentUid = (): string | undefined => useAuthStore.getState().user?.id;
 
+const ITINERARY_JSON_SCHEMA = geminiToJsonSchema(ITINERARY_SCHEMA);
+
+const PROVIDER_LABELS = { openrouter: 'OpenRouter', deepseek: 'DeepSeek' } as const;
+
+// Pianificazione con il fornitore a pagamento scelto nelle Impostazioni.
+// null se non ce n'è uno attivo; un errore se attivo ma non riuscito (o se il
+// modello non legge gli screenshot allegati): in entrambi i casi decide Gemini.
+const planWithProvider = async (request: ItineraryRequest): Promise<{ itinerary: Itinerary; cost: number | null; label: string } | null> => {
+    const status = await getPlanningStatus().catch(() => null);
+    if (!status?.provider || !status.model) return null;
+    const label = PROVIDER_LABELS[status.provider];
+    if (request.images.length > 0 && !status.vision) {
+        throw new Error(`${status.modelName || status.model} non legge le immagini allegate`);
+    }
+    const result = await planTripWithProvider({
+        // Lo schema anche nel testo: DeepSeek accetta solo json_object e non
+        // tutti i provider di OpenRouter applicano lo schema allo stesso modo.
+        prompt: `${request.prompt}\n\nSchema JSON da rispettare:\n${JSON.stringify(ITINERARY_JSON_SCHEMA)}`,
+        images: request.images,
+        schema: ITINERARY_JSON_SCHEMA,
+    });
+    const itinerary = normalizeItinerary(parseItineraryResponse(result.content));
+    if (!itinerary || itinerary.dailySchedule.length === 0) {
+        throw new Error('il modello ha restituito un itinerario senza tappe');
+    }
+    return {
+        itinerary: { ...itinerary, generatedBy: `${status.provider}:${result.model}` },
+        cost: result.cost,
+        label,
+    };
+};
+
 export const useTripStore = create<TripState>((set, get) => ({
     tripHistory: [],
     itinerary: null,
@@ -97,9 +130,26 @@ export const useTripStore = create<TripState>((set, get) => ({
         
         setLoading('isGeneratingItinerary', true);
         try {
-            const itinerary = await generateItinerary({ ...get().draft, motorcycle: activeVehicle });
+            const request = await buildItineraryRequest({ ...get().draft, motorcycle: activeVehicle });
+            let message = "Itinerario calcolato!";
+            let type: 'success' | 'warning' = 'success';
+            let itinerary: Itinerary | null = null;
+            try {
+                const planned = await planWithProvider(request);
+                if (planned) {
+                    itinerary = planned.itinerary;
+                    if (planned.cost !== null) message = `Itinerario calcolato! Costo ${planned.label}: $${planned.cost.toFixed(3)}.`;
+                }
+            } catch (e: any) {
+                // Fornitore attivo ma non riuscito (credito, modello, tempo,
+                // immagini non supportate): l'itinerario si genera con Gemini.
+                console.warn('Fornitore di pianificazione non disponibile, uso Gemini:', e);
+                message = `Pianificazione a pagamento non riuscita (${e?.message || e}): itinerario calcolato con Gemini.`;
+                type = 'warning';
+            }
+            if (!itinerary) itinerary = await generateItinerary(request);
             set({ itinerary, activeTripId: null });
-            showNotification("Itinerario calcolato!");
+            showNotification(message, type);
         } catch (err: any) {
             showNotification(formatGeminiError(err) || "Errore calcolo viaggio.", "error");
         } finally {

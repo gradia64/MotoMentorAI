@@ -50,6 +50,14 @@ const api = {
     return () => ipcRenderer.removeListener('shared-trip:open', handler);
   },
 
+  // --- Pianificazione viaggi (OpenRouter, DeepSeek): solo stato, mai le chiavi ---
+  planningStatus: () => ipcRenderer.invoke('planning:status'),
+  savePlanning: (provider, key, model) => ipcRenderer.invoke('planning:save', provider, key, model),
+  disablePlanning: () => ipcRenderer.invoke('planning:disable'),
+  clearPlanningKey: (provider) => ipcRenderer.invoke('planning:clearKey', provider),
+  listPlanningModels: (provider, key) => ipcRenderer.invoke('planning:models', provider, key),
+  planTrip: (request) => ipcRenderer.invoke('planning:planTrip', request),
+
   // --- Menu Aiuto → Guida (F1) ---
   onOpenHelp(cb) {
     const handler = () => cb();

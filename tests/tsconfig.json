@@ -10,5 +10,5 @@
     "rootDir": "..",
     "outDir": "../node_modules/.cache/motomentor-tests"
   },
-  "include": ["../src/utils/itinerary.ts", "../src/utils/hooks.ts", "../src/utils/garage.ts"]
+  "include": ["../src/utils/itinerary.ts", "../src/utils/hooks.ts", "../src/utils/garage.ts", "../src/utils/jsonSchema.ts"]
 }

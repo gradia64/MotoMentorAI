@@ -232,7 +232,14 @@ const mapApiItineraryToAppItinerary = (apiResponse: any): Itinerary => {
     };
 };
 
-export const generateItinerary = async (options: any): Promise<Itinerary> => {
+// Prompt e immagini (base64) per un itinerario: gli stessi per Gemini e per
+// OpenRouter, così il fallback non rilegge le immagini.
+export interface ItineraryRequest {
+    prompt: string;
+    images: { data: string; mimeType: string }[];
+}
+
+export const buildItineraryRequest = async (options: any): Promise<ItineraryRequest> => {
     const { 
         tripType,
         departure, 
@@ -261,20 +268,38 @@ Richieste aggiuntive: ${customPrompt || 'Nessuna'}.
 
 REGOLE JSON: Restituisci esclusivamente l'oggetto JSON richiesto secondo ITINERARY_SCHEMA.`;
 
+    const images: ItineraryRequest['images'] = [];
+    if (mapImages && mapImages.length > 0) {
+        assertImagesSize(mapImages);
+        for (const img of mapImages) {
+            images.push({ data: await fileToBase64(img), mimeType: img.type });
+        }
+    }
+    return { prompt, images };
+};
+
+// Testo JSON di un itinerario, da qualunque fornitore → Itinerary dell'app.
+export const parseItineraryResponse = (text: string): Itinerary => {
+    const cleanedText = cleanJsonString(text);
+    if (!cleanedText) throw new Error("L'IA ha restituito una risposta vuota.");
+    let data: any;
+    try {
+        data = JSON.parse(cleanedText);
+    } catch (parseError: any) {
+        throw new Error(`Errore di sintassi nella risposta dell'IA: ${parseError.message}`);
+    }
+    return mapApiItineraryToAppItinerary(data);
+};
+
+export const generateItinerary = async (request: ItineraryRequest): Promise<Itinerary> => {
     const config = {
         responseMimeType: "application/json",
         responseSchema: ITINERARY_SCHEMA,
     };
-    
-    const parts: any[] = [{ text: prompt }];
-    if (mapImages && mapImages.length > 0) {
-        assertImagesSize(mapImages);
-        for (const img of mapImages) {
-            const base64Data = await fileToBase64(img);
-            parts.push({ inlineData: { data: base64Data, mimeType: img.type } });
-        }
-    }
-
+    const parts: any[] = [
+        { text: request.prompt },
+        ...request.images.map(img => ({ inlineData: { data: img.data, mimeType: img.mimeType } })),
+    ];
     const { data, modelVersion } = await generateJson({ parts }, config, ITINERARY_TIMEOUT_MS);
     return { ...mapApiItineraryToAppItinerary(data), generatedBy: modelVersion };
 };

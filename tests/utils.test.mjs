@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeItinerary, normalizeSavedTrip, formatModelName } from '../node_modules/.cache/motomentor-tests/src/utils/itinerary.js';
 import { todayLocalISO, formatLocalDate, localDateTime } from '../node_modules/.cache/motomentor-tests/src/utils/hooks.js';
+import { geminiToJsonSchema } from '../node_modules/.cache/motomentor-tests/src/utils/jsonSchema.js';
 import { pickActiveVehicleId } from '../node_modules/.cache/motomentor-tests/src/utils/garage.js';
 
 test('normalizeItinerary rifiuta ciò che non è un itinerario', () => {
@@ -70,4 +71,32 @@ test('generatedBy: conservato se stringa, ignorato altrimenti; nome leggibile', 
   assert.equal('generatedBy' in normalizeItinerary({ dailySchedule: [], generatedBy: 42 }), false);
   assert.equal(formatModelName('gemini-3.6-flash'), 'Gemini 3.6 Flash');
   assert.equal(formatModelName('models/gemini-3.1-pro-preview'), 'Gemini 3.1 Pro Preview');
+});
+
+test('formatModelName: modelli OpenRouter e DeepSeek', () => {
+  assert.equal(formatModelName('openrouter:anthropic/claude-sonnet-5.5'), 'Claude Sonnet 5.5 (via OpenRouter)');
+  assert.equal(formatModelName('openrouter:openai/gpt-5.5'), 'GPT 5.5 (via OpenRouter)');
+  assert.equal(formatModelName('deepseek:deepseek-v4-pro'), 'DeepSeek V4 Pro (via DeepSeek)');
+});
+
+test('geminiToJsonSchema: tipi in minuscolo, ricorsivo, nullable', () => {
+  const out = geminiToJsonSchema({
+    type: 'OBJECT',
+    description: 'd',
+    propertyOrdering: ['a'],
+    required: ['a'],
+    properties: {
+      a: { type: 'ARRAY', items: { type: 'NUMBER' } },
+      b: { type: 'STRING', enum: ['x', 'y'], nullable: true },
+    },
+  });
+  assert.deepEqual(out, {
+    type: 'object',
+    description: 'd',
+    required: ['a'],
+    properties: {
+      a: { type: 'array', items: { type: 'number' } },
+      b: { type: ['string', 'null'], enum: ['x', 'y'] },
+    },
+  });
 });
