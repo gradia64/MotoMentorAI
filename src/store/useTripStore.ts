@@ -39,7 +39,7 @@ interface TripState {
     resetPlanner: () => void;
     loadTripFromHistory: (id: string) => void;
     deleteTrip: (id: string) => Promise<void>;
-    updateTrip: (updatedTrip: SavedTrip) => Promise<void>;
+    updateTrip: (updatedTrip: SavedTrip) => Promise<boolean>;
     setActiveDiaryTrip: (id: string) => void;
     exportHistory: () => void;
     importHistory: (file: File) => Promise<void>;
@@ -155,7 +155,10 @@ export const useTripStore = create<TripState>((set, get) => ({
         if (!userId) return;
         try {
             await removeDoc(`users/${userId}/trips`, id);
-            if (get().activeTripId === id) set({ activeTripId: null });
+            // Il viaggio eliminato non deve restare aperto: "Salva" lo
+            // ricreerebbe con un nuovo id.
+            if (get().activeTripId === id) set({ activeTripId: null, itinerary: null });
+            if (get().activeDiaryTripId === id) set({ activeDiaryTripId: null });
             showNotification("Viaggio eliminato.");
         } catch (e: any) {
             showNotification(handleDataError(e, OperationType.DELETE, `users/${userId}/trips/${id}`), "error");
@@ -165,12 +168,14 @@ export const useTripStore = create<TripState>((set, get) => ({
     updateTrip: async (updatedTrip) => {
         const { showNotification } = useUIStore.getState();
         const userId = currentUid();
-        if (!userId) return;
+        if (!userId) return false;
         try {
             await upsertDoc(`users/${userId}/trips`, updatedTrip.id, { id: updatedTrip.id, userId, data: updatedTrip });
             showNotification("Diario aggiornato.");
+            return true;
         } catch (e: any) {
             showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/trips/${updatedTrip.id}`), "error");
+            return false;
         }
     },
 

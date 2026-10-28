@@ -56,7 +56,7 @@ const TripDiary: React.FC = () => {
         setUnsavedChanges(true);
     };
 
-    const saveCurrentNote = () => {
+    const saveCurrentNote = async () => {
         if (!activeTrip) return;
 
         const currentEntries = activeTrip.diaryEntries || [];
@@ -70,8 +70,9 @@ const TripDiary: React.FC = () => {
         const updatedEntries = [...otherEntries, newEntry].sort((a, b) => a.day - b.day);
         const updatedTrip = { ...activeTrip, diaryEntries: updatedEntries };
 
-        updateTrip(updatedTrip);
-        setUnsavedChanges(false);
+        // La nota risulta salvata solo se la scrittura riesce; in caso di
+        // errore resta "non salvata" (la notifica la mostra updateTrip).
+        if (await updateTrip(updatedTrip)) setUnsavedChanges(false);
     };
 
     if (tripHistory.length === 0) {

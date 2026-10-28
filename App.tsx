@@ -45,15 +45,21 @@ const AppContent: React.FC = () => {
     const { initMechanic } = useMechanicStore();
     const { initChats } = useChatStore();
     
-    const [fatalError, setFatalError] = React.useState<string | null>(null);
     const [sharedTripId, setSharedTripId] = React.useState<string | null>(null);
     // Viaggio condiviso aperto da FILE (.mmt.json): il main process invia
     // l'oggetto via IPC 'shared-trip:open' (menu File o doppio click sul file).
     const [sharedTripObject, setSharedTripObject] = React.useState<SharedTrip | null>(null);
 
     useEffect(() => {
+        // Gli errori di rendering li gestisce l'ErrorBoundary (index.tsx); qui
+        // arrivano quelli fuori dal rendering (es. un handler di click), che
+        // non devono sostituire l'intera interfaccia.
         const handleError = (event: ErrorEvent) => {
-            setFatalError(`Runtime Error: ${event.message}`);
+            console.error('Uncaught error:', event.error ?? event.message);
+            useUIStore.getState().showNotification(
+                `Errore interno: ${event.message || 'operazione non riuscita'}`,
+                'error'
+            );
         };
         const handleRejection = (event: PromiseRejectionEvent) => {
             // Una rejection async non gestita non deve bloccare l'intera app:
@@ -133,29 +139,6 @@ const AppContent: React.FC = () => {
         }
     }, [user, isAuthenticated, initGarage, initTrips, initMechanic, initChats]);
 
-    if (fatalError) {
-        return (
-            <div className="min-h-screen bg-red-900 flex items-center justify-center text-white p-8">
-                <div className="max-w-md w-full bg-black/40 p-6 rounded-xl border border-red-500 shadow-2xl">
-                    <h1 className="text-2xl font-bold mb-4 text-red-400">Si è verificato un errore fatale</h1>
-                    <p className="mb-6 text-sm opacity-90">{fatalError}</p>
-                    <button 
-                        onClick={() => window.location.reload()}
-                        className="w-full bg-red-600 hover:bg-red-500 py-3 rounded-lg font-bold transition-colors"
-                    >
-                        Ricarica applicazione
-                    </button>
-                    <button 
-                        onClick={() => setFatalError(null)}
-                        className="w-full mt-2 text-xs opacity-50 underline"
-                    >
-                        Ignora e prosegui (Sperimentale)
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
     if (sharedTripObject) {
         return (
             <div className="bg-slate-900 min-h-screen text-white">
@@ -216,7 +199,6 @@ const AppContent: React.FC = () => {
 
     return (
         <div className="bg-slate-900 text-white min-h-screen font-sans pb-20 md:pb-0">
-            <Notification />
             <header className="bg-gray-800/80 backdrop-blur-md shadow-lg sticky top-0 z-40 border-b border-gray-700/50">
                 <div className="container mx-auto px-4 py-3 flex justify-between items-center">
                     <button 
@@ -349,6 +331,9 @@ const App: React.FC = () => {
         <>
             <AppContent />
             <SettingsModal />
+            {/* Fuori da AppContent: le notifiche servono anche su Login,
+                viaggio condiviso e Impostazioni, non solo nel layout principale. */}
+            <Notification />
         </>
     );
 };

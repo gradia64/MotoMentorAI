@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeItinerary, normalizeSavedTrip } from '../node_modules/.cache/motomentor-tests/src/utils/itinerary.js';
 import { todayLocalISO, formatLocalDate, localDateTime } from '../node_modules/.cache/motomentor-tests/src/utils/hooks.js';
+import { pickActiveVehicleId } from '../node_modules/.cache/motomentor-tests/src/utils/garage.js';
 
 test('normalizeItinerary rifiuta ciò che non è un itinerario', () => {
   assert.equal(normalizeItinerary(null), null);
@@ -52,4 +53,13 @@ test('le date YYYY-MM-DD non slittano di un giorno', () => {
   assert.equal(formatLocalDate('2026-03-01'), '01/03/2026');
   assert.equal(formatLocalDate(''), 'N/D');
   assert.ok(localDateTime('2026-03-02') > localDateTime('2026-03-01'));
+});
+
+test('pickActiveVehicleId: tiene il veicolo salvato, altrimenti il primo', () => {
+  const vehicles = [{ id: 'a' }, { id: 'b' }];
+  assert.equal(pickActiveVehicleId(vehicles, 'b'), 'b');
+  // Primo avvio (nessuna selezione) o veicolo salvato eliminato.
+  assert.equal(pickActiveVehicleId(vehicles, null), 'a');
+  assert.equal(pickActiveVehicleId(vehicles, 'x'), 'a');
+  assert.equal(pickActiveVehicleId([], 'a'), null);
 });

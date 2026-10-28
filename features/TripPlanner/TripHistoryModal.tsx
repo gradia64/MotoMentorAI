@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { XMarkIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import React, { useRef, useState } from 'react';
+import { XMarkIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { SavedTrip } from '../../types';
 import ActionButton from '../../components/ActionButton';
 import { useEscapeKey } from '../../src/utils/hooks';
@@ -14,7 +14,10 @@ interface TripHistoryModalProps {
     onImport: (file: File) => void;
 }
 
-const TripHistoryModal: React.FC<TripHistoryModalProps> = ({ show, onClose, history, onLoad, onDelete, onExport, onImport }) => {
+const TripHistoryModal: React.FC<TripHistoryModalProps> = ({ show, onClose: closeModal, history, onLoad, onDelete, onExport, onImport }) => {
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    // Chiudendo si annulla anche una conferma di eliminazione in sospeso.
+    const onClose = () => { setConfirmDeleteId(null); closeModal(); };
     useEscapeKey(onClose, show);
     const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -39,7 +42,17 @@ const TripHistoryModal: React.FC<TripHistoryModalProps> = ({ show, onClose, hist
                     <button onClick={onClose} className="text-gray-400 hover:text-white" aria-label="Chiudi storico viaggi"><XMarkIcon className="w-6 h-6"/></button>
                 </div>
                 <div className="p-4 overflow-y-auto">
-                    {history.length === 0 ? (
+                    {confirmDeleteId ? (
+                        <div className="p-6 text-center animate-fade-in">
+                            <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                            <h4 className="text-lg font-bold text-white mb-2">Confermi l'eliminazione?</h4>
+                            <p className="text-gray-400 mb-6">Il viaggio e il suo diario verranno rimossi definitivamente dallo storico.</p>
+                            <div className="flex gap-3 justify-center">
+                                <ActionButton onClick={() => setConfirmDeleteId(null)} className="bg-gray-600 hover:bg-gray-500">Annulla</ActionButton>
+                                <ActionButton onClick={() => { onDelete(confirmDeleteId); setConfirmDeleteId(null); }} className="bg-red-600 hover:bg-red-500">Elimina</ActionButton>
+                            </div>
+                        </div>
+                    ) : history.length === 0 ? (
                         <p className="text-gray-400 text-center py-8">Nessun viaggio salvato nello storico.</p>
                     ) : (
                         <div className="space-y-3">
@@ -58,7 +71,7 @@ const TripHistoryModal: React.FC<TripHistoryModalProps> = ({ show, onClose, hist
                                             Carica
                                         </button>
                                         <button 
-                                            onClick={() => onDelete(trip.id)} 
+                                            onClick={() => setConfirmDeleteId(trip.id)} 
                                             className="text-gray-500 hover:text-red-400 p-1 rounded-full transition-colors"
                                             aria-label={`Elimina ${trip.itinerary.tripTitle}`}
                                         >

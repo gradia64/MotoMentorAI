@@ -1,5 +1,6 @@
-import React from 'react';
-import { XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
+import React, { useState } from 'react';
+import { XMarkIcon, TrashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import ActionButton from '../../components/ActionButton';
 import { SavedDiagnosis } from '../../types';
 import { useEscapeKey } from '../../src/utils/hooks';
 
@@ -11,7 +12,10 @@ interface DiagnosisHistoryModalProps {
     onDelete: (id: string) => void;
 }
 
-const DiagnosisHistoryModal: React.FC<DiagnosisHistoryModalProps> = ({ show, onClose, history, onLoad, onDelete }) => {
+const DiagnosisHistoryModal: React.FC<DiagnosisHistoryModalProps> = ({ show, onClose: closeModal, history, onLoad, onDelete }) => {
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    // Chiudendo si annulla anche una conferma di eliminazione in sospeso.
+    const onClose = () => { setConfirmDeleteId(null); closeModal(); };
     useEscapeKey(onClose, show);
     
     if (!show) return null;
@@ -24,7 +28,17 @@ const DiagnosisHistoryModal: React.FC<DiagnosisHistoryModalProps> = ({ show, onC
                     <button onClick={onClose} className="text-gray-400 hover:text-white" aria-label="Chiudi storico diagnosi"><XMarkIcon className="w-6 h-6"/></button>
                 </div>
                 <div className="p-4 overflow-y-auto">
-                    {history.length === 0 ? (
+                    {confirmDeleteId ? (
+                        <div className="p-6 text-center animate-fade-in">
+                            <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                            <h4 className="text-lg font-bold text-white mb-2">Confermi l'eliminazione?</h4>
+                            <p className="text-gray-400 mb-6">Questa diagnosi verrà rimossa definitivamente dallo storico.</p>
+                            <div className="flex gap-3 justify-center">
+                                <ActionButton onClick={() => setConfirmDeleteId(null)} className="bg-gray-600 hover:bg-gray-500">Annulla</ActionButton>
+                                <ActionButton onClick={() => { onDelete(confirmDeleteId); setConfirmDeleteId(null); }} className="bg-red-600 hover:bg-red-500">Elimina</ActionButton>
+                            </div>
+                        </div>
+                    ) : history.length === 0 ? (
                         <p className="text-gray-400 text-center py-8">Nessuna diagnosi salvata per questo veicolo.</p>
                     ) : (
                         <div className="space-y-3">
@@ -47,7 +61,7 @@ const DiagnosisHistoryModal: React.FC<DiagnosisHistoryModalProps> = ({ show, onC
                                             Carica
                                         </button>
                                         <button 
-                                            onClick={() => onDelete(item.id)} 
+                                            onClick={() => setConfirmDeleteId(item.id)} 
                                             className="text-gray-500 hover:text-red-400 p-1 rounded-full transition-colors"
                                             aria-label={`Elimina diagnosi del ${new Date(item.date).toLocaleDateString('it-IT')}`}
                                         >

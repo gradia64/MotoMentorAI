@@ -5,6 +5,7 @@ import ActionButton from '../../components/ActionButton';
 import InputField from '../../components/InputField';
 import SelectField from '../../components/SelectField';
 import ReceiptScanner from './ReceiptScanner';
+import { ConfirmationModal } from '../Garage/Garage';
 import { ScannedReceiptData } from '../../types';
 import { todayLocalISO, formatLocalDate, localDateTime } from '../../src/utils/hooks';
 
@@ -29,6 +30,8 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
     const [kilometers, setKilometers] = useState('');
     const [isAddFormVisible, setIsAddFormVisible] = useState(false);
     const [isScannerOpen, setIsScannerOpen] = useState(false);
+    // Interventi e promemoria eliminati non si recuperano: si chiede conferma.
+    const [pendingDelete, setPendingDelete] = useState<{ kind: 'record' | 'reminder'; id: string } | null>(null);
 
     const handleReceiptSuccess = (data: ScannedReceiptData) => {
         onAdd({
@@ -135,6 +138,19 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
 
     return (
         <div className="animate-fade-in">
+            <ConfirmationModal
+                isOpen={!!pendingDelete}
+                onClose={() => setPendingDelete(null)}
+                onConfirm={() => {
+                    if (!pendingDelete) return;
+                    if (pendingDelete.kind === 'record') onDelete(pendingDelete.id);
+                    else onDeleteReminder(pendingDelete.id);
+                }}
+                title={pendingDelete?.kind === 'reminder' ? 'Elimina promemoria' : 'Elimina intervento'}
+                message={pendingDelete?.kind === 'reminder'
+                    ? 'Il promemoria verrà rimosso definitivamente.'
+                    : "L'intervento verrà rimosso definitivamente dal libretto di manutenzione."}
+            />
             {/* --- ADD NEW RECORD SECTION (COLLAPSIBLE) --- */}
             <div className="bg-gray-700/50 rounded-lg mb-6 overflow-hidden">
                 <button
@@ -232,7 +248,7 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
                                 </div>
                                 <div className="text-right flex flex-col items-end">
                                      <span className="font-semibold text-lg text-white mb-2">{record.cost.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}</span>
-                                    <button onClick={() => onDelete(record.id)} className="text-gray-500 hover:text-red-400 transition-colors">
+                                    <button onClick={() => setPendingDelete({ kind: 'record', id: record.id })} aria-label="Elimina intervento" className="text-gray-500 hover:text-red-400 transition-colors">
                                         <TrashIcon className="w-5 h-5" />
                                     </button>
                                 </div>
@@ -270,7 +286,7 @@ const MaintenanceLog: React.FC<MaintenanceLogProps> = ({ log, onAdd, onDelete, r
                                 <p className={`font-semibold ${isOverdue(reminder.targetKilometers) ? 'text-red-400' : 'text-white'}`}>{reminder.description}</p>
                                 <p className="text-sm text-gray-400">Scadenza: {reminder.targetKilometers.toLocaleString('it-IT')} km</p>
                             </div>
-                            <button onClick={() => onDeleteReminder(reminder.id)} className="text-gray-500 hover:text-red-400 transition-colors">
+                            <button onClick={() => setPendingDelete({ kind: 'reminder', id: reminder.id })} aria-label="Elimina promemoria" className="text-gray-500 hover:text-red-400 transition-colors">
                                 <TrashIcon className="w-5 h-5" />
                             </button>
                         </div>

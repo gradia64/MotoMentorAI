@@ -140,10 +140,14 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
             problemDescription: draft.problemDescription,
             diagnosisText: diagnosis
         };
+        // L'id si fissa prima della scrittura: un secondo clic (anche durante
+        // l'await) aggiorna la stessa diagnosi invece di crearne un duplicato.
+        set({ activeDiagnosisId: diag.id });
         try {
             await upsertDoc(`users/${userId}/diagnoses`, diag.id, { id: diag.id, userId, data: diag });
             showNotification("Diagnosi salvata.");
         } catch (e: any) {
+            if (!activeDiagnosisId && get().activeDiagnosisId === diag.id) set({ activeDiagnosisId: null });
             showNotification(handleDataError(e, OperationType.WRITE, `users/${userId}/diagnoses/${diag.id}`), "error");
         }
     },
@@ -268,6 +272,11 @@ export const useMechanicStore = create<MechanicState>((set, get) => ({
                     addSeparator();
                     addWrappedText("EQUIPAGGIAMENTO EMERGENZA:", { size: 14, color: [37, 99, 235] });
                     maintenanceTips.emergencyEquipment.forEach((c: any) => addWrappedText(`[ ] ${c}`, { isListItem: true }));
+                    if (maintenanceTips.tripSpecificTips?.length) {
+                        addSeparator();
+                        addWrappedText("SUGGERIMENTI SPECIFICI PER IL VIAGGIO:", { size: 14, color: [37, 99, 235] });
+                        maintenanceTips.tripSpecificTips.forEach((c: any) => addWrappedText(`[ ] ${c}`, { isListItem: true }));
+                    }
                 });
             } catch (error) {
                 console.error("PDF generation error:", error);

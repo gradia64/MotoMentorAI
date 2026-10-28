@@ -7,6 +7,7 @@ import { useAuthStore } from './useAuthStore';
 import { handleDataError, OperationType } from '../utils/dataErrors';
 import { getVehicleSpecs } from '../../services/geminiService';
 import { parseLocalDate } from '../utils/hooks';
+import { pickActiveVehicleId } from '../utils/garage';
 
 interface DeadlineAlert {
     vehicleId: string;
@@ -43,6 +44,12 @@ const activeVehicleKey = (userId: string) => `motomentor_active_vehicle_${userId
 const readActiveVehId = (userId: string): string | null => {
     try { return localStorage.getItem(activeVehicleKey(userId)); } catch { return null; }
 };
+const writeActiveVehId = (userId: string, id: string | null): void => {
+    try {
+        if (id) localStorage.setItem(activeVehicleKey(userId), id);
+        else localStorage.removeItem(activeVehicleKey(userId));
+    } catch { /* la selezione resta valida per la sessione */ }
+};
 const emptyGarage = { garageVehicles: [], activeVehId: null, activeVehicle: null, deadlineAlerts: [] };
 
 export const useGarageStore = create<GarageState>((set, get) => ({
@@ -57,9 +64,13 @@ export const useGarageStore = create<GarageState>((set, get) => ({
         // ad ogni write sulla collection (il main invia 'db:changed').
         const unsub = subscribeCollection<GarageVehicle>(`users/${userId}/vehicles`, (vehicles) => {
             set({ garageVehicles: vehicles });
-            
+
             // Update active vehicle if context changes
-            const activeId = get().activeVehId;
+            const activeId = pickActiveVehicleId(vehicles, get().activeVehId);
+            if (activeId !== get().activeVehId) {
+                set({ activeVehId: activeId });
+                writeActiveVehId(userId, activeId);
+            }
             const active = vehicles.find(v => v.id === activeId) || null;
             set({ activeVehicle: active });
             
@@ -155,8 +166,10 @@ export const useGarageStore = create<GarageState>((set, get) => ({
                 }
             }
             if (get().activeVehId === id) {
-                set({ activeVehId: null, activeVehicle: null });
-                localStorage.removeItem(activeVehicleKey(userId));
+                const remaining = get().garageVehicles.filter(v => v.id !== id);
+                const nextId = pickActiveVehicleId(remaining, null);
+                set({ activeVehId: nextId, activeVehicle: remaining.find(v => v.id === nextId) || null });
+                writeActiveVehId(userId, nextId);
             }
             showNotification("Veicolo rimosso.");
         } catch (e: any) {
@@ -168,7 +181,7 @@ export const useGarageStore = create<GarageState>((set, get) => ({
         const { showNotification } = useUIStore.getState();
         set({ activeVehId: id });
         const userId = currentUid();
-        if (userId) localStorage.setItem(activeVehicleKey(userId), id);
+        if (userId) writeActiveVehId(userId, id);
         const active = get().garageVehicles.find(v => v.id === id) || null;
         set({ activeVehicle: active });
         showNotification("Moto selezionata come attiva!");
