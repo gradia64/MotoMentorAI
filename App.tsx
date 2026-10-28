@@ -8,6 +8,7 @@ import Notification from './components/Notification';
 import Logo from './components/Logo';
 import Login from './components/Login';
 import SettingsModal from './components/SettingsModal';
+import HelpModal from './components/HelpModal';
 import { motion } from 'motion/react';
 
 // Stores
@@ -17,7 +18,7 @@ import { useGarageStore } from './src/store/useGarageStore';
 import { useTripStore } from './src/store/useTripStore';
 import { useMechanicStore } from './src/store/useMechanicStore';
 import { useChatStore } from './src/store/useChatStore';
-import { onOpenSharedTrip, signalRendererReady } from './src/local/client';
+import { onOpenHelp, onOpenSharedTrip, signalRendererReady } from './src/local/client';
 import { normalizeItinerary } from './src/utils/itinerary';
 
 // --- Lazy Loading of Feature Components ---
@@ -86,7 +87,10 @@ const AppContent: React.FC = () => {
 
         // Apertura viaggio condiviso da file (dialog del main o file associato).
         let unsubOpenSharedTrip: (() => void) | undefined;
+        let unsubOpenHelp: (() => void) | undefined;
         try {
+            // Menu Aiuto → Guida (F1).
+            unsubOpenHelp = onOpenHelp(() => useUIStore.getState().setHelpOpen(true));
             unsubOpenSharedTrip = onOpenSharedTrip((trip) => {
                 // Il file arriva dall'esterno: si normalizza prima di mostrarlo.
                 const itinerary = normalizeItinerary(trip?.itinerary);
@@ -113,6 +117,7 @@ const AppContent: React.FC = () => {
             window.removeEventListener('error', handleError);
             window.removeEventListener('unhandledrejection', handleRejection);
             if (unsubOpenSharedTrip) unsubOpenSharedTrip();
+            if (unsubOpenHelp) unsubOpenHelp();
         };
     }, [bootstrap]);
 
@@ -331,6 +336,7 @@ const App: React.FC = () => {
         <>
             <AppContent />
             <SettingsModal />
+            <HelpModal />
             {/* Fuori da AppContent: le notifiche servono anche su Login,
                 viaggio condiviso e Impostazioni, non solo nel layout principale. */}
             <Notification />

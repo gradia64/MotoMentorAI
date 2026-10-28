@@ -23,6 +23,7 @@ interface UIState {
     isGeneratingMaintenancePdf: boolean;
     error: string | null;
     settingsOpen: boolean;
+    helpOpen: boolean;
     
     // Actions
     setMode: (mode: AiMode) => void;
@@ -31,6 +32,7 @@ interface UIState {
     setLoading: (key: keyof UIState, value: boolean) => void;
     setError: (error: string | null) => void;
     setSettingsOpen: (open: boolean) => void;
+    setHelpOpen: (open: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -49,6 +51,7 @@ export const useUIStore = create<UIState>((set) => ({
     isGeneratingMaintenancePdf: false,
     error: null,
     settingsOpen: false,
+    helpOpen: false,
 
     setMode: (mode) => set({ mode }),
     
@@ -66,4 +69,5 @@ export const useUIStore = create<UIState>((set) => ({
     setError: (error) => set({ error }),
 
     setSettingsOpen: (open) => set({ settingsOpen: open }),
+    setHelpOpen: (open) => set({ helpOpen: open }),
 }));

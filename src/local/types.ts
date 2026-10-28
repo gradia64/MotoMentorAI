@@ -31,6 +31,9 @@ export interface LocalDBBridge {
   saveSharedTrip(trip: SharedTrip): Promise<boolean>;
   openSharedTrip(): Promise<SharedTrip>;
   onOpenSharedTrip(cb: (trip: SharedTrip) => void): () => void;
+
+  // --- Menu Aiuto → Guida ---
+  onOpenHelp(cb: () => void): () => void;
 }
 
 declare global {

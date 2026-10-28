@@ -258,6 +258,34 @@ function buildMenu() {
         { role: 'fullscreen', label: 'Schermo intero' },
       ],
     },
+    {
+      label: 'Aiuto',
+      submenu: [
+        {
+          // La guida è una finestra della UI (offline, stesso stile dell'app):
+          // il main chiede al renderer di aprirla.
+          label: 'Guida di MotoMentor AI',
+          accelerator: 'F1',
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('help:open');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Informazioni su MotoMentor AI',
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'Informazioni su MotoMentor AI',
+              message: `MotoMentor AI ${app.getVersion()}`,
+              detail: 'Assistente per motociclisti: viaggi, diario, manutenzione e garage.\n\n'
+                + `Dati salvati solo su questo computer, in ${app.getPath('userData')}.\n\n`
+                + 'Licenza GPL-3.0.',
+            });
+          },
+        },
+      ],
+    },
   ]);
   Menu.setApplicationMenu(menu);
 }

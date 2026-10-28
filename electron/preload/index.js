@@ -49,6 +49,13 @@ const api = {
     ipcRenderer.on('shared-trip:open', handler);
     return () => ipcRenderer.removeListener('shared-trip:open', handler);
   },
+
+  // --- Menu Aiuto → Guida (F1) ---
+  onOpenHelp(cb) {
+    const handler = () => cb();
+    ipcRenderer.on('help:open', handler);
+    return () => ipcRenderer.removeListener('help:open', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('motomentorDB', api);

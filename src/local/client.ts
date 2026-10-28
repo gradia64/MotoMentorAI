@@ -71,5 +71,7 @@ export const saveSharedTripFile = (trip: AppSharedTrip): Promise<boolean> =>
 export const openSharedTripFile = (): Promise<AppSharedTrip> =>
   call(bridge().openSharedTrip()) as Promise<AppSharedTrip>;
 
+export const onOpenHelp = (cb: () => void): (() => void) => bridge().onOpenHelp(cb);
+
 export const onOpenSharedTrip = (cb: (trip: AppSharedTrip) => void): (() => void) =>
   bridge().onOpenSharedTrip((trip) => cb(trip as AppSharedTrip));
