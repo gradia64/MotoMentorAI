@@ -3,9 +3,10 @@
 // (secret su file) + la condivisione dei viaggi tramite file .mmt.json.
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session } from 'electron';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { chmodSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import * as db from './db.js';
+import { isAppUrl, MAX_SHARED_TRIP_BYTES } from './security.js';
 
 // Il main e' un modulo ES ("type":"module"): __dirname non esiste, si deriva
 // da import.meta.url (funziona anche dentro l'asar del pacchetto).
@@ -13,6 +14,13 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 const isDev = !!process.env.MMAI_DEV;
 let mainWindow = null;
+
+// Base degli URL dell'app: solo queste pagine possono navigare nella finestra
+// e invocare l'IPC. pathToFileURL codifica spazi e caratteri speciali come
+// fa Chromium, quindi il confronto regge con qualunque percorso d'installazione.
+const APP_BASE_URL = isDev
+  ? 'http://localhost:5173/'
+  : pathToFileURL(join(__dirname, '../../dist/')).href;
 
 // Nome coerente della cartella dati: ~/.config/MotoMentorAI
 app.setName('MotoMentorAI');
@@ -40,6 +48,8 @@ function saveGeminiKey(key) {
   // via IPC e la UI mostra il fallimento invece di un finto successo.
   const p = getGeminiKeyPath();
   writeFileSync(p, String(key || '').trim(), { mode: 0o600 });
+  // mode vale solo alla creazione: un file preesistente va riportato a 0600.
+  chmodSync(p, 0o600);
   return true;
 }
 
@@ -62,6 +72,9 @@ function safeFileName(title) {
 
 // Legge e valida un file viaggio condiviso. Solleva un errore se non valido.
 function readSharedTripFile(filePath) {
+  if (statSync(filePath).size > MAX_SHARED_TRIP_BYTES) {
+    throw new Error('Il file è troppo grande per essere un viaggio MotoMentor.');
+  }
   const raw = readFileSync(filePath, 'utf8');
   const obj = JSON.parse(raw);
   const trip = obj && obj.sharedTrip ? obj.sharedTrip : obj;
@@ -112,36 +125,54 @@ function sendSharedTripToRenderer(trip) {
   }
 }
 
+// L'IPC risponde solo alle pagine dell'app. Il controllo è sull'URL del frame
+// mittente, non sul webContents: una pagina esterna finita nella stessa
+// finestra avrebbe lo stesso webContents (e il preload) dell'app.
+function assertAppSender(event) {
+  const url = event.senderFrame?.url;
+  if (!url || !isAppUrl(url, APP_BASE_URL)) {
+    throw new Error('Richiesta IPC non autorizzata.');
+  }
+}
+
+function handle(channel, fn) {
+  ipcMain.handle(channel, (event, ...args) => {
+    assertAppSender(event);
+    return fn(event, ...args);
+  });
+}
+
 function registerHandlers() {
-  ipcMain.handle('db:open', () => {
+  handle('db:open', () => {
     db.openDB(getDbPath());
     return true;
   });
-  ipcMain.handle('db:close', () => db.closeDB());
-  ipcMain.handle('db:session', () => db.getSession());
+  handle('db:close', () => db.closeDB());
+  handle('db:session', () => db.getSession());
 
-  ipcMain.handle('db:register', (_e, username, password) => db.registerUser(username, password));
-  ipcMain.handle('db:login', (_e, username, password) => db.loginUser(username, password));
-  ipcMain.handle('db:logout', () => db.logoutUser());
+  handle('db:register', (_e, username, password) => db.registerUser(username, password));
+  handle('db:login', (_e, username, password) => db.loginUser(username, password));
+  handle('db:logout', () => db.logoutUser());
 
-  ipcMain.handle('db:list', (_e, path) => db.listDocs(path));
-  ipcMain.handle('db:upsert', (_e, path, id, data) => {
+  handle('db:list', (_e, path) => db.listDocs(path));
+  handle('db:upsert', (_e, path, id, data) => {
     db.upsertDoc(path, id, data);
     broadcastChanged(path);
     return true;
   });
-  ipcMain.handle('db:delete', (_e, path, id) => {
+  handle('db:delete', (_e, path, id) => {
     db.deleteDoc(path, id);
     broadcastChanged(path);
     return true;
   });
 
-  ipcMain.handle('config:geminiKey', () => readGeminiKey());
-  ipcMain.handle('config:setGeminiKey', (_e, key) => { saveGeminiKey(key); return true; });
+  handle('config:geminiKey', () => readGeminiKey());
+  handle('config:setGeminiKey', (_e, key) => { saveGeminiKey(key); return true; });
 
   // Il renderer segnala di aver registrato i listener (in particolare
   // 'shared-trip:open'): consegna l'eventuale viaggio rimasto in coda.
-  ipcMain.on('app:ready', () => {
+  ipcMain.on('app:ready', (event) => {
+    try { assertAppSender(event); } catch { return; }
     rendererReady = true;
     if (pendingSharedTrip) {
       const trip = pendingSharedTrip;
@@ -158,8 +189,14 @@ function registerHandlers() {
     item.setSaveDialogOptions({ defaultPath: item.getFilename() });
   });
 
+  // L'app non usa permessi del browser (posizione, notifiche, microfono…):
+  // senza questo handler Electron li concederebbe tutti in automatico.
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
+    callback(false);
+  });
+
   // Esporta un viaggio condiviso come file .mmt.json (dialog di salvataggio).
-  ipcMain.handle('sharedtrip:save', async (_e, sharedTrip) => {
+  handle('sharedtrip:save', async (_e, sharedTrip) => {
     if (!sharedTrip || !sharedTrip.itinerary || !sharedTrip.tripTitle) {
       throw new Error('Dati viaggio non validi.');
     }
@@ -174,7 +211,7 @@ function registerHandlers() {
   });
 
   // Apre un viaggio condiviso da file (dialog di apertura).
-  ipcMain.handle('sharedtrip:open', async () => openSharedTripDialog());
+  handle('sharedtrip:open', async () => openSharedTripDialog());
 }
 
 function buildMenu() {
@@ -253,6 +290,15 @@ function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // La finestra non deve mai lasciare l'app (link o file trascinati, redirect):
+  // il preload verrebbe eseguito anche nella pagina esterna, con la sessione
+  // ancora aperta. I link https vanno al browser di sistema.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isAppUrl(url, APP_BASE_URL)) return;
+    event.preventDefault();
+    if (/^https:\/\//i.test(url)) shell.openExternal(url);
   });
 
   // Dopo un reload il renderer deve risegnalarsi prima di ricevere eventi.

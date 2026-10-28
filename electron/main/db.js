@@ -8,6 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { chmodSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -49,6 +50,9 @@ export function openDB(dataPath) {
   closeDB();
   db = new DatabaseSync(dataPath);
   db.exec(SCHEMA);
+  // Il file contiene i dati e gli hash di tutti gli utenti locali: non deve
+  // dipendere dai permessi della cartella (SQLite lo crea 0644).
+  if (dataPath !== ':memory:') chmodSync(dataPath, 0o600);
   dbPath = dataPath;
   currentUid = null;
   return true;

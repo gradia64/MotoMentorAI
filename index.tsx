@@ -59,6 +59,12 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 }
 // --- End Error Boundary Component ---
 
+// Un file o un link trascinato fuori dalle zone di upload farebbe navigare
+// la finestra verso di esso: il default del browser si annulla ovunque.
+// Le zone di upload (Planner) gestiscono comunque il proprio drop.
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => e.preventDefault());
+
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");

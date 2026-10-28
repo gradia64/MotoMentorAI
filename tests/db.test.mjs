@@ -2,10 +2,11 @@
 // node:sqlite e bcryptjs girano con il Node di sistema (≥ 22.5).
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as db from '../electron/main/db.js';
+import { isAppUrl } from '../electron/main/security.js';
 
 const denied = { message: /Accesso negato/ };
 
@@ -74,4 +75,36 @@ test('openDB è idempotente sulla stessa path: un reload non chiude la sessione'
     db.closeDB();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('il file del DB è leggibile solo dal proprietario, anche se preesistente', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mmdb-'));
+  const file = join(dir, 'motomentor.db');
+  try {
+    db.closeDB();
+    db.openDB(file);
+    assert.equal(statSync(file).mode & 0o777, 0o600);
+    db.closeDB();
+    chmodSync(file, 0o644);
+    db.openDB(file);
+    assert.equal(statSync(file).mode & 0o777, 0o600);
+  } finally {
+    db.closeDB();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('isAppUrl: solo le pagine dell\'app, non quelle trascinate o esterne', () => {
+  const base = 'file:///opt/MotoMentor%20AI/resources/app.asar/dist/';
+  assert.ok(isAppUrl('file:///opt/MotoMentor%20AI/resources/app.asar/dist/index.html', base));
+  assert.ok(isAppUrl('file:///opt/MotoMentor%20AI/resources/app.asar/dist/index.html#x', base));
+  assert.ok(!isAppUrl('file:///home/utente/Scaricati/pagina.html', base));
+  assert.ok(!isAppUrl('file:///opt/MotoMentor%20AI/resources/app.asar/dist-evil/x.html', base));
+  assert.ok(!isAppUrl('https://evil.example/', base));
+  assert.ok(!isAppUrl('non un url', base));
+
+  const dev = 'http://localhost:5173/';
+  assert.ok(isAppUrl('http://localhost:5173/index.html', dev));
+  assert.ok(!isAppUrl('http://localhost:5174/', dev));
+  assert.ok(!isAppUrl('https://localhost:5173/', dev));
 });
