@@ -44,7 +44,7 @@ const Notification: React.FC = () => {
 
     return (
         <div 
-            className={`fixed bottom-5 right-5 z-[80]flex items-center gap-3 max-w-sm p-4 rounded-lg shadow-2xl animate-fade-in-up
+            className={`fixed bottom-5 right-5 z-[80] flex items-center gap-3 max-w-sm p-4 rounded-lg shadow-2xl animate-fade-in-up
                 ${bgColor}
                 border ${borderColor}`}
             role="alert"
