@@ -375,7 +375,7 @@ export const SettingsModal: React.FC = () => {
 
                         <p className="text-[11px] text-gray-500">
                             Le chiavi restano solo su questo computer (<code className="text-blue-300">~/.config/MotoMentorAI/</code>) e le richieste
-                            partono dal processo principale dell'app. Ogni viaggio consuma credito del fornitore; con OpenRouter il costo compare al termine.
+                            partono dal processo principale dell'app. Ogni viaggio consuma credito del fornitore: il costo compare al termine (esatto con OpenRouter, stimato dal listino con DeepSeek).
                         </p>
                     </div>
                 </div>

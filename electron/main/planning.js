@@ -16,6 +16,35 @@ const perMillion = (price) => {
 
 const byName = (a, b) => a.name.localeCompare(b.name);
 
+// Listino DeepSeek (dollari per milione di token, ore di punta) da
+// api-docs.deepseek.com/quick_start/pricing, 2026-10-28. Fuori dalle ore di
+// punta costa la metà. I nomi storici sono fatturati come Flash. DeepSeek non
+// restituisce il costo: lo si stima dai token, quindi va aggiornato se cambia il listino.
+const DEEPSEEK_PEAK_PRICES = {
+  'deepseek-flash': { cacheHit: 0.006, cacheMiss: 0.3, output: 1.2 },
+  'deepseek-v4-flash': { cacheHit: 0.006, cacheMiss: 0.3, output: 1.2 },
+  'deepseek-v4-flash-vision-exp': { cacheHit: 0.006, cacheMiss: 0.3, output: 1.2 },
+  'deepseek-v4-pro': { cacheHit: 0.044, cacheMiss: 1.32, output: 3.96 },
+};
+
+// Ore di punta DeepSeek: 01–04 e 06–10 UTC, dal lunedì al venerdì (le
+// festività cinesi, a tariffa ridotta, non sono considerate: la stima per eccesso).
+export const isDeepSeekPeak = (date) => {
+  const day = date.getUTCDay();
+  const hour = date.getUTCHours();
+  return day >= 1 && day <= 5 && ((hour >= 1 && hour < 4) || (hour >= 6 && hour < 10));
+};
+
+export function estimateDeepSeekCost(model, usage, date = new Date()) {
+  const prices = DEEPSEEK_PEAK_PRICES[model];
+  if (!prices || !usage) return null;
+  const hit = Number(usage.prompt_cache_hit_tokens) || 0;
+  const miss = Number(usage.prompt_cache_miss_tokens ?? (Number(usage.prompt_tokens) || 0) - hit) || 0;
+  const out = Number(usage.completion_tokens) || 0;
+  const factor = isDeepSeekPeak(date) ? 1 : 0.5;
+  return ((hit * prices.cacheHit + miss * prices.cacheMiss + out * prices.output) / 1e6) * factor;
+}
+
 // Ogni fornitore descrive: indirizzo, come filtrare l'elenco dei modelli e
 // come chiedere l'output JSON.
 export const PROVIDERS = {
@@ -46,6 +75,8 @@ export const PROVIDERS = {
     },
     // strict: false perché lo schema dell'itinerario non dichiara tutti i
     // campi come obbligatori; la risposta viene comunque normalizzata.
+    // OpenRouter restituisce il costo esatto in usage.cost.
+    cost: (json) => (typeof json?.usage?.cost === 'number' ? { cost: json.usage.cost, estimated: false } : null),
     jsonOptions: (schema) => ({
       response_format: { type: 'json_schema', json_schema: { name: 'itinerario', strict: false, schema } },
       // Solo provider che supportano davvero response_format.
@@ -71,6 +102,10 @@ export const PROVIDERS = {
           completionPerM: null,
         }))
         .sort(byName);
+    },
+    cost: (json, model) => {
+      const cost = estimateDeepSeekCost(model, json?.usage);
+      return cost === null ? null : { cost, estimated: true };
     },
     // DeepSeek accetta solo json_object: lo schema è nel testo della richiesta.
     // max_tokens ampio perché un itinerario lungo non venga troncato.
@@ -120,8 +155,8 @@ export function buildPlanRequest(providerId, { model, prompt, images = [], schem
   };
 }
 
-// Restituisce il testo JSON della risposta, il modello effettivo e il costo
-// in dollari, se il fornitore lo riporta (OpenRouter sì, DeepSeek no).
+// Restituisce il testo JSON della risposta, il modello effettivo, i token e il
+// costo in dollari: esatto con OpenRouter, stimato dal listino con DeepSeek.
 export async function planTrip({ providerId, apiKey, model, prompt, images, schema, fetchImpl = fetch, timeoutMs = PLAN_TIMEOUT_MS }) {
   const provider = getProvider(providerId);
   if (!apiKey) throw new Error(`Chiave ${provider.label} non configurata.`);
@@ -152,9 +187,15 @@ export async function planTrip({ providerId, apiKey, model, prompt, images, sche
   if (typeof content !== 'string' || !content.trim()) {
     throw new Error(`${provider.label}: il modello ha restituito una risposta vuota.`);
   }
+  const billing = provider.cost(json, model);
+  const tokens = Number(json.usage?.total_tokens)
+    || (Number(json.usage?.prompt_tokens) || 0) + (Number(json.usage?.completion_tokens) || 0)
+    || null;
   return {
     content,
     model: typeof json.model === 'string' && json.model ? json.model : model,
-    cost: typeof json.usage?.cost === 'number' ? json.usage.cost : null,
+    cost: billing?.cost ?? null,
+    costEstimated: billing?.estimated ?? false,
+    tokens,
   };
 }

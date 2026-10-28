@@ -200,7 +200,7 @@ const SECTIONS: HelpSection[] = [
                 <L items={[
                     <>Nelle Impostazioni, sezione <B>Pianificazione viaggi con un modello a pagamento</B>, scegli il fornitore: <B>OpenRouter</B> (Claude, GPT, Gemini Pro e molti altri, con una sola chiave) oppure <B>DeepSeek</B>.</>,
                     <>Inserisci la chiave del fornitore (con DeepSeek premi poi <B>Carica modelli</B>), scegli il modello e premi <B>Usa per i viaggi</B>. Per OpenRouter l'elenco riporta il prezzo per milione di token.</>,
-                    <>Da quel momento solo <B>Crea Itinerario</B> usa il modello scelto; chat, diagnosi e le altre funzioni restano su Gemini gratuito. Con OpenRouter al termine compare il costo della pianificazione.</>,
+                    <>Da quel momento solo <B>Crea Itinerario</B> usa il modello scelto; chat, diagnosi e le altre funzioni restano su Gemini gratuito. Al termine compare il costo della pianificazione: esatto con OpenRouter, stimato dai token e dal listino con DeepSeek (che non lo comunica).</>,
                     <>Il viaggio viene pianificato con Gemini, con un avviso, se il fornitore non risponde (credito esaurito, modello non disponibile) o se alleghi screenshot a un modello segnato “niente immagini”.</>,
                     <><B>Torna a Gemini</B> disattiva la pianificazione a pagamento; <B>Elimina chiave</B> cancella la chiave del fornitore da questo computer (le chiavi sono in ~/.config/MotoMentorAI).</>,
                     <>Attenzione: gli abbonamenti personali (ChatGPT Plus, Claude Pro…) non includono l'accesso API; i fornitori si ricaricano a parte.</>,

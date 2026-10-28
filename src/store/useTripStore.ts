@@ -1,6 +1,7 @@
 
 import { create } from 'zustand';
 import { subscribeCollection, upsertDoc, removeDoc, listCollection, saveSharedTripFile, getPlanningStatus, planTripWithProvider } from '../local/client';
+import type { PlanTripResult } from '../local/types';
 import { Itinerary, SavedTrip, SharedTrip, ITINERARY_SCHEMA } from '../../types';
 import { useUIStore } from './useUIStore';
 import { useGarageStore } from './useGarageStore';
@@ -82,7 +83,17 @@ const PROVIDER_LABELS = { openrouter: 'OpenRouter', deepseek: 'DeepSeek' } as co
 // Pianificazione con il fornitore a pagamento scelto nelle Impostazioni.
 // null se non ce n'è uno attivo; un errore se attivo ma non riuscito (o se il
 // modello non legge gli screenshot allegati): in entrambi i casi decide Gemini.
-const planWithProvider = async (request: ItineraryRequest): Promise<{ itinerary: Itinerary; cost: number | null; label: string } | null> => {
+// "Costo OpenRouter: $0.173" / "Costo stimato DeepSeek: circa $0.004 (15.230 token)".
+const costMessage = (label: string, result: PlanTripResult): string => {
+    const tokens = result.tokens !== null ? ` (${result.tokens.toLocaleString('it-IT')} token)` : '';
+    if (result.cost === null) return tokens ? ` Token usati con ${label}:${tokens.slice(1, -1)}.` : '';
+    const amount = `$${result.cost < 0.001 ? result.cost.toFixed(4) : result.cost.toFixed(3)}`;
+    return result.costEstimated
+        ? ` Costo stimato ${label}: circa ${amount}${tokens}.`
+        : ` Costo ${label}: ${amount}${tokens}.`;
+};
+
+const planWithProvider = async (request: ItineraryRequest): Promise<{ itinerary: Itinerary; costText: string } | null> => {
     const status = await getPlanningStatus().catch(() => null);
     if (!status?.provider || !status.model) return null;
     const label = PROVIDER_LABELS[status.provider];
@@ -102,8 +113,7 @@ const planWithProvider = async (request: ItineraryRequest): Promise<{ itinerary:
     }
     return {
         itinerary: { ...itinerary, generatedBy: `${status.provider}:${result.model}` },
-        cost: result.cost,
-        label,
+        costText: costMessage(label, result),
     };
 };
 
@@ -138,7 +148,7 @@ export const useTripStore = create<TripState>((set, get) => ({
                 const planned = await planWithProvider(request);
                 if (planned) {
                     itinerary = planned.itinerary;
-                    if (planned.cost !== null) message = `Itinerario calcolato! Costo ${planned.label}: $${planned.cost.toFixed(3)}.`;
+                    message = `Itinerario calcolato!${planned.costText}`;
                 }
             } catch (e: any) {
                 // Fornitore attivo ma non riuscito (credito, modello, tempo,

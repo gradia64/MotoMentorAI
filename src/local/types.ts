@@ -38,7 +38,9 @@ export interface PlanTripRequest {
 export interface PlanTripResult {
   content: string;
   model: string;
-  cost: number | null;
+  cost: number | null;       // dollari
+  costEstimated: boolean;    // true se stimato dal listino (DeepSeek)
+  tokens: number | null;     // token totali (ingresso + uscita)
 }
 
 export interface LocalDBBridge {

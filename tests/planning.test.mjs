@@ -2,7 +2,7 @@
 // con una fetch finta: nessuna rete, nessuna chiave reale.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { filterPlanningModels, listPlanningModels, buildPlanRequest, planTrip } from '../electron/main/planning.js';
+import { filterPlanningModels, listPlanningModels, buildPlanRequest, planTrip, estimateDeepSeekCost, isDeepSeekPeak } from '../electron/main/planning.js';
 
 const orModel = (id, { input = ['text', 'image'], params = ['structured_outputs'], name = id } = {}) => ({
   id,
@@ -71,10 +71,11 @@ test('planTrip: risposta valida → contenuto, modello effettivo, costo; indiriz
   const base = { apiKey: 'k', model: 'x/y', prompt: 'p', images: [], schema: {} };
 
   const or = await planTrip({ ...base, providerId: 'openrouter', fetchImpl: fetchImpl({ model: 'x/y-2026', choices: [{ message: { content: '{"a":1}' } }], usage: { cost: 0.0123 } }) });
-  assert.deepEqual(or, { content: '{"a":1}', model: 'x/y-2026', cost: 0.0123 });
+  assert.deepEqual(or, { content: '{"a":1}', model: 'x/y-2026', cost: 0.0123, costEstimated: false, tokens: null });
 
-  const ds = await planTrip({ ...base, providerId: 'deepseek', fetchImpl: fetchImpl({ choices: [{ message: { content: '{"b":2}' } }] }) });
-  assert.deepEqual(ds, { content: '{"b":2}', model: 'x/y', cost: null });
+  const ds = await planTrip({ ...base, providerId: 'deepseek', fetchImpl: fetchImpl({ choices: [{ message: { content: '{"b":2}' } }], usage: { prompt_tokens: 10, completion_tokens: 5 } }) });
+  // Modello fuori listino: niente costo, ma i token sì.
+  assert.deepEqual(ds, { content: '{"b":2}', model: 'x/y', cost: null, costEstimated: false, tokens: 15 });
 
   assert.deepEqual(urls, [
     ['https://openrouter.ai/api/v1/chat/completions', 'Bearer k'],
@@ -98,4 +99,32 @@ test('planTrip: oltre il tempo massimo la richiesta viene annullata', async () =
     planTrip({ providerId: 'deepseek', apiKey: 'k', model: 'x', prompt: 'p', images: [], schema: {}, fetchImpl: hanging, timeoutMs: 50 }),
     /DeepSeek non ha risposto entro/
   );
+});
+
+test('DeepSeek: costo stimato dai token, ore di punta e ore normali', () => {
+  const peak = new Date('2026-10-28T07:00:00Z');     // mercoledì, 07 UTC
+  const offPeak = new Date('2026-10-31T07:00:00Z');  // sabato
+  assert.equal(isDeepSeekPeak(peak), true);
+  assert.equal(isDeepSeekPeak(new Date('2026-10-28T05:00:00Z')), false);
+  assert.equal(isDeepSeekPeak(offPeak), false);
+
+  const usage = { prompt_cache_hit_tokens: 1_000_000, prompt_cache_miss_tokens: 1_000_000, completion_tokens: 1_000_000 };
+  // flash in ore di punta: 0.006 + 0.3 + 1.2
+  assert.ok(Math.abs(estimateDeepSeekCost('deepseek-flash', usage, peak) - 1.506) < 1e-9);
+  assert.ok(Math.abs(estimateDeepSeekCost('deepseek-flash', usage, offPeak) - 0.753) < 1e-9);
+  // Senza i campi della cache, l'ingresso è tutto "cache miss".
+  assert.ok(Math.abs(estimateDeepSeekCost('deepseek-v4-pro', { prompt_tokens: 1_000_000, completion_tokens: 0 }, peak) - 1.32) < 1e-9);
+  assert.equal(estimateDeepSeekCost('modello-sconosciuto', usage, peak), null);
+  assert.equal(estimateDeepSeekCost('deepseek-flash', undefined, peak), null);
+});
+
+test('planTrip DeepSeek: costo stimato e token nella risposta', async () => {
+  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({
+    choices: [{ message: { content: '{}' } }],
+    usage: { prompt_tokens: 2000, prompt_cache_hit_tokens: 0, prompt_cache_miss_tokens: 2000, completion_tokens: 8000, total_tokens: 10000 },
+  }) });
+  const r = await planTrip({ providerId: 'deepseek', apiKey: 'k', model: 'deepseek-flash', prompt: 'p', images: [], schema: {}, fetchImpl });
+  assert.equal(r.costEstimated, true);
+  assert.equal(r.tokens, 10000);
+  assert.ok(r.cost > 0 && r.cost < 0.02);
 });
